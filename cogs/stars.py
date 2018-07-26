@@ -221,7 +221,7 @@ class Stars:
         method = getattr(self, f'{fmt}_message')
 
         user = self.bot.get_user(payload.user_id)
-        if user is None or user.bot:
+        if user is None:
             return
 
         async with self.bot.pool.acquire() as con:

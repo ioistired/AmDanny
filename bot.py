@@ -22,23 +22,10 @@ log = logging.getLogger(__name__)
 
 initial_extensions = (
     'cogs.meta',
-    'cogs.splatoon',
-    'cogs.rng',
-    'cogs.mod',
-    'cogs.profile',
-    'cogs.tags',
-    'cogs.lounge',
-    'cogs.carbonitex',
-    'cogs.api',
     'cogs.stars',
     'cogs.admin',
-    'cogs.buttons',
-    'cogs.reminder',
     'cogs.stats',
-    'cogs.emoji',
     'cogs.config',
-    'cogs.tournament',
-    'cogs.dpy',
 )
 
 def _prefix_callable(bot, msg):
@@ -59,7 +46,6 @@ class RoboDanny(commands.AutoShardedBot):
         self.client_id = config.client_id
         self.carbon_key = config.carbon_key
         self.bots_key = config.bots_key
-        self.challonge_api_key = config.challonge_api_key
         self.session = aiohttp.ClientSession(loop=self.loop)
 
         self.add_command(self.do)

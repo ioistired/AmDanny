@@ -28,7 +28,6 @@ in the `psql` tool:
 ```sql
 CREATE ROLE rdanny WITH LOGIN PASSWORD 'yourpw';
 CREATE DATABASE rdanny OWNER rdanny;
-CREATE EXTENSION pg_trgm;
 ```
 
 5. **Setup configuration**
@@ -42,7 +41,6 @@ token = '' # your bot's token
 carbon_key = '' # your bot's key on carbon's site
 bots_key = '' # your key on bots.discord.pw
 postgresql = 'postgresql://user:password@host/database' # your postgresql info from above
-challonge_api_key = '...' # for tournament cog
 ```
 
 6. **Configuration of database**
