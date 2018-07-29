@@ -27,7 +27,8 @@ You will need PostgreSQL 9.5 or higher and type the following
 in the `psql` tool:
 
 ```sql
-CREATE ROLE rdanny WITH LOGIN PASSWORD 'yourpw';
+CREATE USER rdanny;
+\password rdanny
 CREATE DATABASE rdanny OWNER rdanny;
 ```
 
