@@ -87,10 +87,10 @@ class Spoiler:
         self.bot = bot
         self._spoiler_cache = LRU(128)
         self._spoiler_cooldown = SpoilerCooldown()
-		self.bot.loop.create_task(self._get_storage_channel())
+        self.bot.loop.create_task(self._get_storage_channel())
 
-	async def _get_storage_channel(self):
-		await self.bot.wait_until_ready()
+    async def _get_storage_channel(self):
+        await self.bot.wait_until_ready()
         self._storage_channel = self.bot.get_guild(304827868209217536).get_channel(472945148888743937)
 
 
