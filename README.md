@@ -1,6 +1,7 @@
-## R. Danny
+## Am Danny
 
-A personal bot that runs on Discord.
+It's [R. Danny](https://github.com/Rapptz/RoboDanny) but just the spoiler and starboard commands.
+I wanted this for a server I'm in; we don't need the rest.
 
 ## Running
 
@@ -8,7 +9,7 @@ I would prefer if you don't run an instance of my bot. Just call the join comman
 
 Nevertheless, the installation steps are as follows:
 
-1. **Make sure to get Python 3.5 or higher**
+1. **Make sure to get Python 3.6 or higher**
 
 This is required to actually run the bot.
 
