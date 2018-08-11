@@ -1,8 +1,5 @@
-git+https://github.com/Rapptz/discord.py@rewrite#egg=discord.py
-lxml
-psutil
 asyncpg>=0.12.0
 click
-parsedatetime
-lru_dict
-python-dateutil
+git+https://github.com/Rapptz/discord.py@rewrite#egg=discord.py
+jishaku
+psutil
