@@ -1,3 +1,4 @@
+import discord
 from discord.ext import commands
 from .utils import db, checks, cache
 from .utils.paginator import Pages
@@ -173,7 +174,7 @@ class Config:
         return row is not None
 
     async def __global_check_once(self, ctx):
-        if ctx.guild is None:
+        if ctx.guild is None or isinstance(ctx.author, discord.User):
             return True
 
         is_owner = await ctx.bot.is_owner(ctx.author)
