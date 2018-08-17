@@ -1,6 +1,5 @@
 *.json
-!migrations/*
-migrations/current-*.json
+migrations/
 
 *.pyc
 *.log
