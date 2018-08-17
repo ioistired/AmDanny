@@ -12,6 +12,7 @@ class Reminders(db.Table):
 	expires = db.Column(db.Datetime, index=True)
 	created = db.Column(db.Datetime, default="now() at time zone 'utc'")
 	event = db.Column(db.String)
+	author_name = db.Column(db.String)
 	extra = db.Column(db.JSON, default="'{}'::jsonb")
 
 class Timer:
