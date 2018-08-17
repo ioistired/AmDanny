@@ -15,7 +15,7 @@ class Reminders(db.Table):
 	extra = db.Column(db.JSON, default="'{}'::jsonb")
 
 class Timer:
-	__slots__ = ('args', 'kwargs', 'event', 'id', 'created_at', 'expires')
+	__slots__ = frozenset(('args', 'kwargs', 'event', 'author_name', 'id', 'created_at', 'expires'))
 
 	def __init__(self, *, record):
 		self.id = record['id']
@@ -24,15 +24,17 @@ class Timer:
 		self.args = extra.get('args', [])
 		self.kwargs = extra.get('kwargs', {})
 		self.event = record['event']
+		self.author_name = record['author_name']
 		self.created_at = record['created']
 		self.expires = record['expires']
 
 	@classmethod
-	def temporary(cls, *, expires, created, event, args, kwargs):
+	def temporary(cls, *, expires, created, event, author_name, args, kwargs):
 		pseudo = {
 			'id': None,
 			'extra': { 'args': args, 'kwargs': kwargs },
 			'event': event,
+			'author_name': author_name,
 			'created': created,
 			'expires': expires
 		}
@@ -149,7 +151,7 @@ class Reminder:
 		--------
 		:class:`Timer`
 		"""
-		when, event, *args = args
+		when, event, author_name, *args = args
 
 		try:
 			connection = kwargs.pop('connection')
@@ -157,7 +159,13 @@ class Reminder:
 			connection = self.bot.pool
 
 		now = datetime.datetime.utcnow()
-		timer = Timer.temporary(event=event, args=args, kwargs=kwargs, expires=when, created=now)
+		timer = Timer.temporary(
+			event=event,
+			args=args,
+			author_name=author_name,
+			kwargs=kwargs,
+			expires=when,
+			created=now)
 		delta = (when - now).total_seconds()
 		if delta <= 60:
 			# a shortcut for small timers
@@ -165,12 +173,12 @@ class Reminder:
 			return timer
 
 		query = """
-			INSERT INTO reminders (event, extra, expires)
-			VALUES ($1, $2::jsonb, $3)
+			INSERT INTO reminders (event, author_name, extra, expires)
+			VALUES ($1, $2, $3::jsonb, $4)
 			RETURNING id;
 		"""
 
-		row = await connection.fetchrow(query, event, { 'args': args, 'kwargs': kwargs }, when)
+		row = await connection.fetchrow(query, event, author_name, {'args': args, 'kwargs': kwargs}, when)
 		timer.id = row[0]
 
 		# only set the data check if it can be waited on
@@ -185,11 +193,17 @@ class Reminder:
 
 		return timer
 
-	def mention(self, message):
+	@staticmethod
+	def mention(*, id=None, name=None):
+		if name is not None:
+			return '@' + name
+		return f'<@{id}>'
+
+	@classmethod
+	def message_mention(cls, message):
 		if message.webhook_id:
-			return f'@{message.author.name}'
-		else:
-			return message.author.mention
+			return cls.mention(name=message.author.name)
+		return message.author.mention
 
 	@commands.group(aliases=['timer', 'remind'], usage='<when>', invoke_without_command=True)
 	async def reminder(self, ctx, *, when: time.UserFriendlyTime(commands.clean_content, default='…')):
@@ -209,6 +223,7 @@ class Reminder:
 		timer = await self.create_timer(
 			when.dt,
 			'reminder',
+			ctx.message.webhook_id and ctx.author.name,
 			ctx.author.id,
 			ctx.channel.id,
 			when.arg,
@@ -216,7 +231,7 @@ class Reminder:
 			message_id=ctx.message.id)
 
 		delta = time.human_timedelta(when.dt)
-		await ctx.send(f'Alright {self.mention(ctx.message)}, in {delta}: {when.arg}')
+		await ctx.send(f'Alright {self.message_mention(ctx.message)}, in {delta}: {when.arg}')
 
 	@reminder.command(name='list')
 	async def reminder_list(self, ctx):
@@ -289,7 +304,7 @@ class Reminder:
 
 		guild_id = channel.guild.id if isinstance(channel, discord.TextChannel) else '@me'
 		message_id = timer.kwargs.get('message_id')
-		msg = f'<@{author_id}>, {timer.human_delta}: {message}'
+		msg = f'{self.mention(name=timer.author_name, id=author_id)}, {timer.human_delta}: {message}'
 
 		if message_id:
 			msg = f'{msg}\n\n<https://discordapp.com/channels/{guild_id}/{channel.id}/{message_id}>'
