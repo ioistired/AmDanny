@@ -183,11 +183,11 @@ class Reminder:
 
         return timer
 
-	def mention(self, message):
-		if message.webhook_id:
-			return f'@{message.author.name}'
-		else:
-			return message.author.mention
+    def mention(self, message):
+        if message.webhook_id:
+            return f'@{message.author.name}'
+        else:
+            return message.author.mention
 
     @commands.group(aliases=['timer', 'remind'], usage='<when>', invoke_without_command=True)
     async def reminder(self, ctx, *, when: time.UserFriendlyTime(commands.clean_content, default='\u2026')):
