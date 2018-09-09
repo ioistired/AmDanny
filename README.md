@@ -1,7 +1,8 @@
 ## Am Danny
 
-It's [R. Danny](https://github.com/Rapptz/RoboDanny) but just the spoiler and starboard commands.
-I wanted this for a server I'm in; we don't need the rest.
+It's [R. Danny](https://github.com/Rapptz/RoboDanny) but just the starboard and reminder commands.
+I wanted this for a server I'm in; we don't need the rest. On our server, users bridged from IRC speak via a webhook,
+and can't see embeds. This fork accommodates them.
 
 ## Running
 
