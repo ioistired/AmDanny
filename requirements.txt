@@ -1,7 +1,9 @@
 asyncpg>=0.12.0
 click
+difflib
 git+https://github.com/Rapptz/discord.py@rewrite#egg=discord.py
 jishaku
 lru-dict
+lxml
 python-dateutil
 psutil
