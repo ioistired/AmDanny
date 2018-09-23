@@ -25,6 +25,7 @@ initial_extensions = (
     'cogs.stars',
     'cogs.reminder',
     'cogs.admin',
+    'cogs.rng',
     'jishaku',  # for the shell command
     'cogs.stats',
     'cogs.config',
