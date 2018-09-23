@@ -155,7 +155,7 @@ class Context(commands.Context):
             return confirm
 
     def tick(self, opt, label=None):
-        emoji = '✅' if opt else '<:error:48732221899092889>'
+        emoji = '✅' if opt else '<:error:487322218989092889>'
         if label is not None:
             return f'{emoji}: {label}'
         return emoji
