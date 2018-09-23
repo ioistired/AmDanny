@@ -20,7 +20,7 @@ def can_use_spoiler():
         return True
     return commands.check(predicate)
 
-SPOILER_EMOJI_ID = 472944603356594177
+SPOILER_EMOJI_ID = 493543639687888896
 
 class SpoilerCache:
     __slots__ = ('author_id', 'channel_id', 'title', 'text', 'attachments')
