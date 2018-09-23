@@ -31,7 +31,7 @@ class Buttons:
             'https://www.youtube.com/watch?v=i0p1bmr0EmE',
             'an intense feeling of deep affection',
             'something we don\'t have'
-        ))
+        )))
 
     @commands.command(hidden=True)
     async def bored(self, ctx):
