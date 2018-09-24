@@ -127,31 +127,44 @@ class API:
         await self.do_rtfm(ctx, 'rewrite', obj)
 
     async def refresh_faq_cache(self):
-        self.faq_entries = {}
-        base_url = 'http://discordpy.readthedocs.io/en/latest/faq.html'
-        async with self.bot.session.get(base_url) as resp:
-            text = await resp.text(encoding='utf-8')
+        self._faq_cache = {}
+        base_urls = {
+            'rewrite': 'https://discordpy.readthedocs.io/en/rewrite/faq.html',
+            'latest': 'https://discordpy.readthedocs.io/en/latest/faq.html',
+        }
 
-            root = etree.fromstring(text, etree.HTMLParser())
-            nodes = root.findall(".//div[@id='questions']/ul[@class='simple']//ul/li/a")
-            for node in nodes:
-                self.faq_entries[''.join(node.itertext()).strip()] = base_url + node.get('href').strip()
+        for branch, base_url in base_urls.items():
+            self._faq_cache[branch] = faq_entries = {}
+            async with self.bot.session.get(base_url) as resp:
+                text = await resp.text(encoding='utf-8')
 
-    @commands.command()
-    async def faq(self, ctx, *, query: str = None):
-        """Shows an FAQ entry from the discord.py documentation"""
+                root = etree.fromstring(text, etree.HTMLParser())
+                nodes = root.findall(".//div[@id='questions']/ul[@class='simple']//ul/li//a")
+                for node in nodes:
+                    faq_entries[''.join(node.itertext()).strip()] = base_url + node.get('href').strip()
+
+    async def do_faq(self, ctx, branch, query):
         if not hasattr(self, 'faq_entries'):
             await self.refresh_faq_cache()
 
         if query is None:
-            return await ctx.send('http://discordpy.readthedocs.io/en/latest/faq.html')
+            return await ctx.send(f'https://discordpy.readthedocs.io/en/{branch}/faq.html')
 
-        matches = fuzzy.extract_matches(query, self.faq_entries, scorer=fuzzy.partial_ratio, score_cutoff=40)
+        matches = fuzzy.extract_matches(query, self._faq_cache[branch], scorer=fuzzy.partial_ratio, score_cutoff=40)
         if len(matches) == 0:
-            return await ctx.send('Nothing found...')
+            return await ctx.send('Nothing found…')
 
         fmt = '\n'.join(f'**{key}**\n{value}' for key, _, value in matches)
         await ctx.send(fmt)
+
+    @commands.group(invoke_without_command=True)
+    async def faq(self, ctx, *, query=None):
+        """Shows an FAQ entry from the discord.py documentation"""
+        await self.do_faq(ctx, 'latest', query)
+
+    @faq.command(name='rewrite')
+    async def faq_rewrite(self, ctx, *, query=None):
+        await self.do_faq(ctx, 'rewrite', query)
 
 def setup(bot):
     bot.add_cog(API(bot))

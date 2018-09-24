@@ -781,7 +781,7 @@ class Stars:
         if not perms.read_message_history:
             return await ctx.send(f'Bot does not have Read Message History in {ctx.starboard.channel.mention}.')
 
-        await ctx.send('Please be patient this will take a while...')
+        await ctx.send('Please be patient; this will take a while…')
         async with ctx.typing():
             channel = ctx.starboard.channel
 
