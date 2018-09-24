@@ -6,6 +6,7 @@ import re
 import lxml.etree as etree
 
 DISCORD_PY_GUILD_ID = 336642139381301249
+ROBODANNY_ID = 80528701850124288
 
 class API:
     """Discord API exclusive things."""
@@ -16,6 +17,11 @@ class API:
 
     async def on_message(self, message):
         if not message.guild or message.guild.id != DISCORD_PY_GUILD_ID:
+            return
+
+        # this bot is only a backup for when R. Danny is offline
+        robodanny = message.guild.get_member(ROBODANNY_ID)
+        if robodanny and robodanny.status is not discord.Status.offline:
             return
 
         m = self.issue.search(message.content)
