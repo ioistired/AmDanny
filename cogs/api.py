@@ -34,11 +34,11 @@ class API:
 
         page_types = {
             'rewrite': (
-                'https://discordpy.readthedocs.org/en/rewrite/api.html',
-                'https://discordpy.readthedocs.org/en/rewrite/ext/commands/api.html'
+                'https://discordpy.readthedocs.io/en/rewrite/api.html',
+                'https://discordpy.readthedocs.io/en/rewrite/ext/commands/api.html'
             ),
             'latest': (
-                'https://discordpy.readthedocs.org/en/latest/api.html',
+                'https://discordpy.readthedocs.io/en/latest/api.html',
             )
         }
 
@@ -61,7 +61,7 @@ class API:
         self._rtfm_cache = cache
 
     async def do_rtfm(self, ctx, key, obj):
-        base_url = f'https://discordpy.readthedocs.org/en/{key}/'
+        base_url = f'https://discordpy.readthedocs.io/en/{key}/'
 
         if obj is None:
             await ctx.send(base_url)
