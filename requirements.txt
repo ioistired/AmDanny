@@ -4,5 +4,6 @@ git+https://github.com/Rapptz/discord.py@rewrite#egg=discord.py
 jishaku
 lru-dict
 lxml
+parsedatetime
 python-dateutil
 psutil
