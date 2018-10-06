@@ -38,6 +38,12 @@ class Admin:
             return f'```py\n{e.__class__.__name__}: {e}\n```'
         return f'```py\n{e.text}{"^":>{e.offset}}\n{e.__class__.__name__}: {e}```'
 
+    @commands.command(name='quit', hidden=True)
+    @commands.is_owner()
+    async def _quit(self, ctx):
+        """Quits the bot."""
+        await self.bot.logout()
+
     @commands.command(hidden=True)
     async def load(self, ctx, *, module):
         """Loads a module."""

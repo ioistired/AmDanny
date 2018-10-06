@@ -1,9 +1,11 @@
-from discord.ext import commands
-import discord
+import logging
 from lxml import etree
 import random
-import logging
+import unicodedata
 from urllib.parse import quote as uriquote
+
+import discord
+from discord.ext import commands
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +39,11 @@ class Buttons:
     async def bored(self, ctx):
         """boredom looms"""
         await ctx.send('http://i.imgur.com/BuTKSzf.png')
+
+    @commands.command(hidden=True)
+    async def hello(self, ctx):
+        """Displays my intro message."""
+        await ctx.send('Hello! I\'m a robot! Danny#0007 made me.')
 
     def parse_google_card(self, node):
         e = discord.Embed(colour=discord.Colour.blurple())
@@ -354,6 +361,21 @@ class Buttons:
                 msg = first_entry
 
             await ctx.send(msg)
+
+    @commands.command(rest_is_raw=True, hidden=True)
+    @commands.is_owner()
+    async def echo(self, ctx, *, content):
+        await ctx.send(content)
+
+    @commands.command(hidden=True)
+    async def cud(self, ctx):
+        """pls no spam"""
+
+        for i in range(3):
+            await ctx.send(3 - i)
+            await asyncio.sleep(1)
+
+        await ctx.send('go')
 
 def setup(bot):
     bot.add_cog(Buttons(bot))
