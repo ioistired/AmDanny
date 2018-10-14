@@ -413,7 +413,7 @@ class Stars:
         bot_message_id = record[0]
 
         if bot_message_id is None:
-            new_msg = await starboard.channel.send(content, embed=embed)
+            new_msg = await starboard.channel.send(embed=embed)
             query = "UPDATE starboard_entries SET bot_message_id=$1 WHERE message_id=$2;"
             await connection.execute(query, new_msg.id, message_id)
         else:
