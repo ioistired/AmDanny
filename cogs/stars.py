@@ -721,24 +721,19 @@ class Stars:
     async def star_jump(self, ctx, message: MessageID):
         """Shows a link to a starred message via its ID.
 
-        To get the ID of a message you should right click on the
-        message and then click "Copy ID". You must have
-        Developer Mode enabled to get that functionality.
-
-        You can only use this command once per 10 seconds.
+        The ID can either be the starred message ID
+        or the message ID in the starboard channel.
         """
 
-        query = """
-            SELECT entry.channel_id,
-                   entry.message_id
-            FROM starrers
-            INNER JOIN starboard_entries entry
-                ON entry.id = starrers.entry_id
-            WHERE entry.guild_id=$1
-                  AND (
-                      entry.message_id=$2
-                      OR entry.bot_message_id=$2)
-            LIMIT 1"""
+        query = """SELECT entry.channel_id,
+                          entry.message_id
+                   FROM starrers
+                   INNER JOIN starboard_entries entry
+                   ON entry.id = starrers.entry_id
+                   WHERE entry.guild_id=$1
+                   AND (entry.message_id=$2 OR entry.bot_message_id=$2)
+                   LIMIT 1
+                """
 
         record = await ctx.db.fetchrow(query, ctx.guild.id, message)
         if record is None:
