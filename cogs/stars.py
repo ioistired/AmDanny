@@ -169,12 +169,12 @@ class Stars:
         emoji = self.star_emoji(stars)
 
         if stars > 1:
-            title = f'{emoji} **{stars}**'
+            content = f'{emoji} **{stars}** {message.channel.mention} ID: {message.id}'
         else:
-            title = f'{emoji}'
+            content = f'{emoji} {message.channel.mention} ID: {message.id}'
 
-        jump_link = f'[Original message]({message.jump_url})'
-        embed = discord.Embed(title=title, description=f'{message.content}\n\n{jump_link}')
+
+        embed = discord.Embed(description=message.content)
         if message.embeds:
             data = message.embeds[0]
             if data.type == 'image':
@@ -190,7 +190,7 @@ class Stars:
         embed.set_author(name=message.author.display_name, icon_url=message.author.avatar_url_as(format='png'))
         embed.timestamp = message.created_at
         embed.colour = self.star_gradient_colour(stars)
-        return embed
+        return content, embed
 
     async def get_message(self, channel, message_id):
         try:
@@ -405,7 +405,7 @@ class Stars:
 
         # at this point, we either edit the message or we create a message
         # with our star info
-        embed = self.get_emoji_message(msg, count)
+        content, embed = self.get_emoji_message(msg, count)
 
         # get the message ID to edit:
         query = "SELECT bot_message_id FROM starboard_entries WHERE message_id=$1;"
@@ -413,7 +413,7 @@ class Stars:
         bot_message_id = record[0]
 
         if bot_message_id is None:
-            new_msg = await starboard.channel.send(embed=embed)
+            new_msg = await starboard.channel.send(content, embed=embed)
             query = "UPDATE starboard_entries SET bot_message_id=$1 WHERE message_id=$2;"
             await connection.execute(query, new_msg.id, message_id)
         else:
@@ -423,7 +423,7 @@ class Stars:
                 query = "DELETE FROM starboard_entries WHERE message_id=$1;"
                 await connection.execute(query, message_id)
             else:
-                await new_msg.edit(embed=embed)
+                await new_msg.edit(content=content, embed=embed)
 
     async def unstar_message(self, channel, message_id, starrer_id, *, connection):
         guild_id = channel.guild.id
@@ -512,8 +512,8 @@ class Stars:
             if msg is None:
                 raise StarError('\N{BLACK QUESTION MARK ORNAMENT} This message could not be found.')
 
-            embed = self.get_emoji_message(msg, count)
-            await bot_message.edit(embed=embed)
+            content, embed = self.get_emoji_message(msg, count)
+            await bot_message.edit(content=content, embed=embed)
 
     @commands.command()
     @checks.is_mod()
@@ -713,8 +713,8 @@ class Stars:
         if msg is None:
             return await ctx.send('The message has been deleted.')
 
-        embed = self.get_emoji_message(msg, record['Stars'])
-        await ctx.send(embed=embed)
+        content, embed = self.get_emoji_message(msg, record['Stars'])
+        await ctx.send(content, embed=embed)
 
     @star.command(name='who')
     @requires_starboard()
