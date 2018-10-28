@@ -29,7 +29,7 @@ initial_extensions = (
     'cogs.buttons',
     'cogs.admin',
     'cogs.rng',
-    'jishaku',  # for the shell command
+    'ben_cogs.ie_jishaku',
     'cogs.stats',
     'cogs.config',
 )
