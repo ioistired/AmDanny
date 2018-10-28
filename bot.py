@@ -30,6 +30,8 @@ initial_extensions = (
     'cogs.admin',
     'cogs.rng',
     'ben_cogs.ie_jishaku',
+    'ben_cogs.misc',
+    'ben_cogs.debug',
     'cogs.stats',
     'cogs.config',
 )
