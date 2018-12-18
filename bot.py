@@ -29,7 +29,7 @@ initial_extensions = (
     'cogs.buttons',
     'cogs.admin',
     'cogs.rng',
-    'ben_cogs.ie_jishaku',
+	'jishaku',
     'ben_cogs.misc',
     'ben_cogs.debug',
     'cogs.stats',
