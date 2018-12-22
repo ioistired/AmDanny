@@ -7,14 +7,14 @@ from discord.ext import commands
 
 @dataclass
 class StalkedUser:
-	stalked: discord.User
+	user: discord.User
 	stalkers: Set[discord.User]
 	last_changed: float
 
 	async def notify_stalkers(self, old_status: discord.Status, new_status: discord.Status):
 		for stalker in self.stalkers:
 			with contextlib.suppress(discord.Forbidden):
-				await stalker.send(f"{self.stalked}'s status just changed from {old_status} to {new_status}")
+				await stalker.send(f"{self.user}'s status just changed from {old_status} to {new_status}")
 
 class Stalking:
 	# values that are "more online"/"more active" come first
@@ -29,18 +29,24 @@ class Stalking:
 	async def on_ready(self):
 		await self.bot.change_presence(status=discord.Status.idle)
 
-	@commands.command(usage='<user>')
+	@commands.command()
 	@commands.is_owner()
-	async def stalk(self, ctx, member: discord.Member):
+	async def stalk(self, ctx, *, user: discord.User):
 		"""starts stalking a given user until the next time i reboot"""
 		try:
-			stalked = self.stalked[member.id]
+			stalked = self.stalked[user.id]
 		except KeyError:
-			self.stalked[member.id] = StalkedUser(user=member.user, stalkers={context.author}, last_changed=time.monotonic())
+			self.stalked[user.id] = StalkedUser(user=user, stalkers={ctx.author}, last_changed=time.monotonic())
 		else:
 			stalked.stalkers.add(ctx.author)
 
-		await ctx.send(f"""✅ I will DM you when {member}'s status "increases".""")
+		await ctx.send(f"""✅ I will DM you when {user}'s status "increases".""")
+
+	@commands.command()
+	async def unstalk(self, ctx, *, user: discord.User):
+		"""stops stalking someone"""
+		self.stalked.pop(user.id, None)
+		await ctx.message.add_reaction('✅')
 
 	@stalk.error
 	async def stalk_error(self, ctx, error):
@@ -69,4 +75,4 @@ class Stalking:
 			stalked.last_changed = time.monotonic()
 
 def setup(bot):
-	bot.add_cog(MemberStalker(bot))
+	bot.add_cog(Stalking(bot))
