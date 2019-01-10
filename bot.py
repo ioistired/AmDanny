@@ -108,8 +108,8 @@ class RoboDanny(commands.AutoShardedBot):
     async def on_resumed(self):
         print('resumed...')
 
-    def get_context(self, message):
-        return super().get_context(message, cls=context.Context)
+    def get_context(self, message, cls=context.Context):
+        return super().get_context(message, cls)
 
     async def process_commands(self, message):
         ctx = await self.get_context(message)
