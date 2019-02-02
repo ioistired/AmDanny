@@ -146,7 +146,7 @@ class Meta:
         periods, e.g. tag.create for the create subcommand of the tag command
         or by spaces.
         """
-        source_url = 'https://github.com/bmintz/RoboDanny'
+        source_url = 'https://github.com/bmintz/AmDanny'
         if command is None:
             return await ctx.send(source_url)
 
