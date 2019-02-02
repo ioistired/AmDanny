@@ -55,12 +55,12 @@ class Buttons:
             digit = f'{ord(c):X}'
             try:
                 name = unicodedata.name(c)
-                code_version = f'\\N{{{name}}}'
+                as_code = f'\\N{{{name}}}'
 
                 info = f'U+{digit:>04}: `{code_version}`'
             except ValueError:
                 name = 'Name not found.'
-                code_version = f'\\U{digit:>06}'
+                as_code = f'\\U{digit:>06}'
 
                 info = f'`{code_version}`: {name}'
 
