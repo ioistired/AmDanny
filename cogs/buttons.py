@@ -52,19 +52,19 @@ class Buttons:
         """
 
         def to_string(c):
-            digit = f'{ord(c):X}'
+            ord_c = ord(c)
             try:
                 name = unicodedata.name(c)
                 as_code = f'\\N{{{name}}}'
 
-                info = f'U+{digit:>04}: `{code_version}`'
+                info = f'U+{ord_c:>04X}: `{as_code}`'
             except ValueError:
                 name = 'Name not found.'
-                as_code = f'\\U{digit:>06}'
+                as_code = f'\\U{ord_c:>06x}'
 
-                info = f'`{code_version}`: {name}'
+                info = f'`{as_code}`: {name}'
 
-            return f'{info} — {c} — <http://www.fileformat.info/info/unicode/char/{digit}>'
+            return f'{info} — {c} — <http://www.fileformat.info/info/unicode/char/{ord_c:x}>'
 
         msg = '\n'.join(map(to_string, characters))
         if len(msg) > 2000:
