@@ -52,7 +52,7 @@ class Buttons:
         """
 
         def to_string(c):
-            digit = f'{ord(c):x}'
+            digit = f'{ord(c):X}'
             try:
                 name = unicodedata.name(c)
                 code_version = f'\\N{{{name}}}'
