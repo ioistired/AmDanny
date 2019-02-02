@@ -109,7 +109,7 @@ class RoboDanny(commands.AutoShardedBot):
         print('resumed...')
 
     def get_context(self, message, cls=context.Context):
-        return super().get_context(message, cls)
+        return super().get_context(message, cls=cls)
 
     async def process_commands(self, message):
         ctx = await self.get_context(message)
