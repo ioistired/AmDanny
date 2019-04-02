@@ -3,10 +3,46 @@ from .utils import fuzzy
 import asyncio
 import discord
 import re
+import zlib
+import io
+import os
 import lxml.etree as etree
 
 DISCORD_PY_GUILD_ID = 336642139381301249
 ROBODANNY_ID = 80528701850124288
+
+class SphinxObjectFileReader:
+    # Inspired by Sphinx's InventoryFileReader
+    BUFSIZE = 16 * 1024
+
+    def __init__(self, buffer):
+        self.stream = io.BytesIO(buffer)
+
+    def readline(self):
+        return self.stream.readline().decode('utf-8')
+
+    def skipline(self):
+        self.stream.readline()
+
+    def read_compressed_chunks(self):
+        decompressor = zlib.decompressobj()
+        while True:
+            chunk = self.stream.read(self.BUFSIZE)
+            if len(chunk) == 0:
+                break
+            yield decompressor.decompress(chunk)
+        yield decompressor.flush()
+
+    def read_compressed_lines(self):
+        buf = b''
+        for chunk in self.read_compressed_chunks():
+            buf += chunk
+            pos = buf.find(b'\n')
+            while pos != -1:
+                yield buf[:pos].decode('utf-8')
+                buf = buf[pos + 1:]
+                pos = buf.find(b'\n')
+
 
 class API(commands.Cog):
     """Discord API exclusive things."""
@@ -40,47 +76,78 @@ class API(commands.Cog):
             url = 'https://github.com/Rapptz/discord.py/issues/'
             await message.channel.send(url + m.group('number'))
 
-    async def build_rtfm_lookup_table(self):
+    def parse_object_inv(self, stream, url):
+        # key: URL
+        # n.b.: key doesn't have `discord` or `discord.ext.commands` namespaces
+        result = {}
+
+        # first line is version info
+        version = stream.readline().rstrip()
+        if version != '# Sphinx inventory version 2':
+            raise RuntimeError('Invalid objects.inv file version.')
+
+        # next line is "# Project: <name>"
+        # then after that is "# Version: <version>"
+        # we don't care about these so skip them
+        stream.skipline()
+        stream.skipline()
+
+        # next line says if it's a zlib header
+        line = stream.readline()
+        if 'zlib' not in line:
+            raise RuntimeError('Invalid objects.inv file, not z-lib compatible.')
+
+        # This code mostly comes from the Sphinx repository.
+        entry_regex = re.compile(r'(?x)(.+?)\s+(\S*:\S*)\s+(-?\d+)\s+(\S+)\s+(.*)')
+        for line in stream.read_compressed_lines():
+            match = entry_regex.match(line.rstrip())
+            if not match:
+                continue
+
+            name, directive, prio, location, dispname = match.groups()
+            if directive == 'py:module' and name in result:
+                # From the Sphinx Repository:
+                # due to a bug in 1.1 and below,
+                # two inventory entries are created
+                # for Python modules, and the first
+                # one is correct
+                continue
+
+            if location.endswith('$'):
+                location = location[:-1] + name
+
+            as_key = name.replace('discord.ext.commands.', '').replace('discord.', '')
+            result[as_key] = os.path.join(url, location)
+
+        return result
+
+    async def build_rtfm_lookup_table(self, page_types):
         cache = {}
-
-        page_types = {
-            'rewrite': (
-                'https://discordpy.readthedocs.io/en/rewrite/api.html',
-                'https://discordpy.readthedocs.io/en/rewrite/ext/commands/api.html'
-            ),
-            'latest': (
-                'https://discordpy.readthedocs.io/en/latest/api.html',
-            )
-        }
-
-        for key, pages in page_types.items():
+        for key, page in page_types.items():
             sub = cache[key] = {}
-            for page in pages:
-                async with self.bot.session.get(page) as resp:
-                    if resp.status != 200:
-                        raise RuntimeError('Cannot build rtfm lookup table, try again later.')
+            async with self.bot.session.get(page + '/objects.inv') as resp:
+                if resp.status != 200:
+                    raise RuntimeError('Cannot build rtfm lookup table, try again later.')
 
-                    text = await resp.text(encoding='utf-8')
-                    root = etree.fromstring(text, etree.HTMLParser())
-                    nodes = root.findall(".//dt/a[@class='headerlink']")
-
-                    for node in nodes:
-                        href = node.get('href', '')
-                        as_key = href.replace('#discord.', '').replace('ext.commands.', '')
-                        sub[as_key] = page + href
+                stream = SphinxObjectFileReader(await resp.read())
+                cache[key] = self.parse_object_inv(stream, page)
 
         self._rtfm_cache = cache
 
     async def do_rtfm(self, ctx, key, obj):
-        base_url = f'https://discordpy.readthedocs.io/en/{key}/'
+        page_types = {
+            'rewrite': 'https://discordpy.readthedocs.io/en/rewrite',
+            'latest': 'https://discordpy.readthedocs.io/en/latest',
+            'python': 'https://docs.python.org/3'
+        }
 
         if obj is None:
-            await ctx.send(base_url)
+            await ctx.send(page_types[key])
             return
 
         if not hasattr(self, '_rtfm_cache'):
             await ctx.trigger_typing()
-            await self.build_rtfm_lookup_table()
+            await self.build_rtfm_lookup_table(page_types)
 
         # identifiers don't have spaces
         obj = obj.replace(' ', '_')
@@ -136,6 +203,11 @@ class API(commands.Cog):
     async def rtfm_rewrite(self, ctx, *, obj: str = None):
         """Gives you a documentation link for a rewrite discord.py entity."""
         await self.do_rtfm(ctx, 'rewrite', obj)
+
+    @rtfm.command(name='python', aliases=['py'])
+    async def rtfm_python(self, ctx, *, obj: str = None):
+        """Gives you a documentation link for a Python entity."""
+        await self.do_rtfm(ctx, 'python', obj)
 
     async def refresh_faq_cache(self):
         self._faq_cache = {}
