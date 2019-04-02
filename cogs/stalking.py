@@ -12,14 +12,10 @@ class StalkedUser:
 
 	RECENT_STATUS_CHANGE_THRESHOLD = 10  # seconds
 
-	user: discord.User
-	stalkers: Set[discord.User]
-	last_changed: float
-
 	def __init__(self, user, stalkers):
-		self.user = user
-		self.stalkers = stalkers
-		self.last_changed = 0.0
+		self.user: discord.User = user
+		self.stalkers: Set[discord.User] = stalkers
+		self.last_changed: float = 0.0
 
 	def not_changed_recently(self):
 		"""return whether the status changed more than N seconds ago"""
@@ -33,7 +29,7 @@ class StalkedUser:
 id = operator.attrgetter('id')
 ERROR = discord.PartialEmoji(animated=False, name='error', id=487322218989092889)
 
-class Stalking:
+class Stalking(commands.Cog):
 	# values that are "more online" / "more active" come first
 	STATUS_HIERARCHY = dict(map(reversed, enumerate((
 		discord.Status.online,
@@ -46,8 +42,7 @@ class Stalking:
 		self.stalked: Dict[int, StalkedUser] = {}
 		self.lowest_mutual_guilds: dict[int, discord.Guild] = {}
 
-		self._register_events()
-
+	@commands.Cog.listener()
 	async def on_member_update(self, before, after):
 		try:
 			stalked = self.stalked[after.id]
@@ -133,19 +128,16 @@ class Stalking:
 			(guild for guild in self.bot.guilds if guild.get_member(member.id)),
 			key=_id)
 
+	@commands.Cog.listener(name='on_member_join')
+	@commands.Cog.listener(name='on_member_leave')
 	async def _on_member_join_leave(self, member):
 		self.update_lowest_mutual_guild(member)
 
+	@commands.Cog.listener(name='on_guild_join')
+	@commands.Cog.listener(name='on_guild_remove')
 	async def _on_guild_join_remove(self, guild):
 		for member in guild.members:
 			self.update_lowest_mutual_guild(member)
-
-	def _register_events(self):
-		for event in 'on_member_join', 'on_member_leave':
-			self.bot.add_listener(self._on_member_join_leave, event)
-
-		for event in 'on_guild_join', 'on_guild_remove':
-			self.bot.add_listener(self._on_guild_join_remove, event)
 
 def setup(bot):
 	bot.add_cog(Stalking(bot))
