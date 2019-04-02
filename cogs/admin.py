@@ -13,7 +13,7 @@ from typing import Union
 import datetime
 from collections import Counter
 
-class Admin:
+class Admin(commands.Cog):
     """Admin-only commands that make the bot dynamic."""
 
     def __init__(self, bot):
@@ -30,7 +30,7 @@ class Admin:
         # remove `foo`
         return content.strip('` \n')
 
-    async def __local_check(self, ctx):
+    async def cog_check(self, ctx):
         return await self.bot.is_owner(ctx.author)
 
     def get_syntax_error(self, e):
@@ -49,8 +49,8 @@ class Admin:
         """Loads a module."""
         try:
             self.bot.load_extension(module)
-        except Exception as e:
-            await ctx.send(f'```py\n{traceback.format_exc()}\n```')
+        except commands.ExtensionError as e:
+            await ctx.send(f'{e.__class__.__name__}: {e}')
         else:
             await ctx.send('\N{OK HAND SIGN}')
 
@@ -59,8 +59,8 @@ class Admin:
         """Unloads a module."""
         try:
             self.bot.unload_extension(module)
-        except Exception as e:
-            await ctx.send(f'```py\n{traceback.format_exc()}\n```')
+        except commands.ExtensionError as e:
+            await ctx.send(f'{e.__class__.__name__}: {e}')
         else:
             await ctx.send('\N{OK HAND SIGN}')
 
@@ -68,10 +68,9 @@ class Admin:
     async def _reload(self, ctx, *, module):
         """Reloads a module."""
         try:
-            self.bot.unload_extension(module)
-            self.bot.load_extension(module)
-        except Exception as e:
-            await ctx.send(f'```py\n{traceback.format_exc()}\n```')
+            self.bot.reload_extension(module)
+        except commands.ExtensionError as e:
+            await ctx.send(f'{e.__class__.__name__}: {e}')
         else:
             await ctx.send('\N{OK HAND SIGN}')
 
@@ -261,8 +260,8 @@ class Admin:
         msg = copy.copy(ctx.message)
         msg.author = who
         msg.content = ctx.prefix + command
-        new_ctx = await self.bot.get_context(msg)
-        new_ctx.db = ctx.db
+        new_ctx = await self.bot.get_context(msg, cls=type(ctx))
+        new_ctx._db = ctx._db
         await self.bot.invoke(new_ctx)
 
 def setup(bot):

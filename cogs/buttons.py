@@ -1,3 +1,5 @@
+import asyncio
+from discord.ext import commands
 import logging
 import random
 import unicodedata
@@ -6,9 +8,11 @@ from urllib.parse import quote as uriquote
 import discord
 from discord.ext import commands
 
+from .utils import checks
+
 log = logging.getLogger(__name__)
 
-class Buttons:
+class Buttons(commands.Cog):
     """Buttons that make you feel."""
 
     def __init__(self, bot):
@@ -79,7 +83,6 @@ class Buttons:
     @commands.command(hidden=True)
     async def cud(self, ctx):
         """pls no spam"""
-
         for i in range(3):
             await ctx.send(3 - i)
             await asyncio.sleep(1)

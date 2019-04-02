@@ -8,13 +8,24 @@ import lxml.etree as etree
 DISCORD_PY_GUILD_ID = 336642139381301249
 ROBODANNY_ID = 80528701850124288
 
-class API:
+class API(commands.Cog):
     """Discord API exclusive things."""
 
     def __init__(self, bot):
         self.bot = bot
         self.issue = re.compile(r'##(?P<number>[0-9]+)')
+        self._recently_blocked = set()
 
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        if member.guild.id != DISCORD_API_ID:
+            return
+
+        if member.bot:
+            role = discord.Object(id=USER_BOTS_ROLE)
+            await member.add_roles(role)
+
+    @commands.Cog.listener()
     async def on_message(self, message):
         if not message.guild or message.guild.id != DISCORD_PY_GUILD_ID:
             return
