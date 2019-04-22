@@ -1,9 +1,10 @@
 asyncpg>=0.12.0
 ben_cogs
 click
-git+https://github.com/Rapptz/discord.py@rewrite#egg=discord.py
+git+https://github.com/Rapptz/discord.py@master
 lru-dict
 lxml
 parsedatetime
+pygit2
 python-dateutil
 psutil

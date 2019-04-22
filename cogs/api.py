@@ -73,15 +73,15 @@ class API(commands.Cog):
         result = {}
 
         # first line is version info
-        version = stream.readline().rstrip()
-        if version != '# Sphinx inventory version 2':
+        inv_version = stream.readline().rstrip()
+
+        if inv_version != '# Sphinx inventory version 2':
             raise RuntimeError('Invalid objects.inv file version.')
 
         # next line is "# Project: <name>"
         # then after that is "# Version: <version>"
-        # we don't care about these so skip them
-        stream.skipline()
-        stream.skipline()
+        projname = stream.readline().rstrip()[11:]
+        version = stream.readline().rstrip()[11:]
 
         # next line says if it's a zlib header
         line = stream.readline()
@@ -96,6 +96,7 @@ class API(commands.Cog):
                 continue
 
             name, directive, prio, location, dispname = match.groups()
+            domain, _, subdirective = directive.partition(':')
             if directive == 'py:module' and name in result:
                 # From the Sphinx Repository:
                 # due to a bug in 1.1 and below,
@@ -104,11 +105,20 @@ class API(commands.Cog):
                 # one is correct
                 continue
 
+            # Most documentation pages have a label
+            if directive == 'std:doc':
+                subdirective = 'label'
+
             if location.endswith('$'):
                 location = location[:-1] + name
 
-            as_key = name.replace('discord.ext.commands.', '').replace('discord.', '')
-            result[as_key] = os.path.join(url, location)
+            key = name if dispname == '-' else dispname
+            prefix = f'{subdirective}:' if domain == 'std' else ''
+
+            if projname == 'discord.py':
+                key = key.replace('discord.ext.commands.', '').replace('discord.', '')
+
+            result[f'{prefix}{key}'] = os.path.join(url, location)
 
         return result
 
@@ -127,7 +137,6 @@ class API(commands.Cog):
 
     async def do_rtfm(self, ctx, key, obj):
         page_types = {
-            'rewrite': 'https://discordpy.readthedocs.io/en/rewrite',
             'latest': 'https://discordpy.readthedocs.io/en/latest',
             'python': 'https://docs.python.org/3'
         }
@@ -140,10 +149,9 @@ class API(commands.Cog):
             await ctx.trigger_typing()
             await self.build_rtfm_lookup_table(page_types)
 
-        # identifiers don't have spaces
-        obj = obj.replace(' ', '_')
+        obj = re.sub(r'^(?:discord\.(?:ext\.)?)?(?:commands\.)?(.+)', r'\1', obj)
 
-        if key == 'rewrite':
+        if key == 'latest':
             pit_of_success_helpers = {
                 'vc': 'VoiceClient',
                 'msg': 'Message',
@@ -163,16 +171,16 @@ class API(commands.Cog):
                     break
 
             def replace(o):
-                return pit_of_success_helpers.get(o.group(0), '')
+                return pit_of_success_helpers.get(o.group(1), '')
 
-            pattern = re.compile('|'.join(fr'\b{k}\b' for k in pit_of_success_helpers.keys()))
+            pattern = re.compile('|'.join(fr'(?:^({k})$|({k})\.)' for k in pit_of_success_helpers.keys()))
             obj = pattern.sub(replace, obj)
 
         cache = list(self._rtfm_cache[key].items())
         def transform(tup):
             return tup[0]
 
-        matches = fuzzy.finder(obj, cache, key=lambda t: t[0], lazy=False)[:5]
+        matches = fuzzy.finder(obj, cache, key=lambda t: t[0], lazy=False)[:8]
 
         e = discord.Embed(colour=discord.Colour.blurple())
         if len(matches) == 0:
@@ -190,34 +198,25 @@ class API(commands.Cog):
         """
         await self.do_rtfm(ctx, 'latest', obj)
 
-    @rtfm.command(name='rewrite')
-    async def rtfm_rewrite(self, ctx, *, obj: str = None):
-        """Gives you a documentation link for a rewrite discord.py entity."""
-        await self.do_rtfm(ctx, 'rewrite', obj)
-
     @rtfm.command(name='python', aliases=['py'])
     async def rtfm_python(self, ctx, *, obj: str = None):
         """Gives you a documentation link for a Python entity."""
         await self.do_rtfm(ctx, 'python', obj)
 
     async def refresh_faq_cache(self):
-        self._faq_cache = {}
-        base_urls = {
-            'rewrite': 'https://discordpy.readthedocs.io/en/rewrite/faq.html',
-            'latest': 'https://discordpy.readthedocs.io/en/latest/faq.html',
-        }
+        self.faq_entries = {}
+        base_url = 'https://discordpy.readthedocs.io/en/latest/faq.html'
+        async with self.bot.session.get(base_url) as resp:
+            text = await resp.text(encoding='utf-8')
 
-        for branch, base_url in base_urls.items():
-            self._faq_cache[branch] = faq_entries = {}
-            async with self.bot.session.get(base_url) as resp:
-                text = await resp.text(encoding='utf-8')
+            root = etree.fromstring(text, etree.HTMLParser())
+            nodes = root.findall(".//div[@id='questions']/ul[@class='simple']/li/ul//a")
+            for node in nodes:
+                self.faq_entries[''.join(node.itertext()).strip()] = base_url + node.get('href').strip()
 
-                root = etree.fromstring(text, etree.HTMLParser())
-                nodes = root.findall(".//div[@id='questions']/ul[@class='simple']//ul/li//a")
-                for node in nodes:
-                    faq_entries[''.join(node.itertext()).strip()] = base_url + node.get('href').strip()
-
-    async def do_faq(self, ctx, branch, query):
+    @commands.command()
+    async def faq(self, ctx, *, query: str = None):
+        """Shows an FAQ entry from the discord.py documentation"""
         if not hasattr(self, 'faq_entries'):
             await self.refresh_faq_cache()
 
@@ -230,15 +229,6 @@ class API(commands.Cog):
 
         fmt = '\n'.join(f'**{key}**\n{value}' for key, _, value in matches)
         await ctx.send(fmt)
-
-    @commands.group(invoke_without_command=True)
-    async def faq(self, ctx, *, query=None):
-        """Shows an FAQ entry from the discord.py documentation"""
-        await self.do_faq(ctx, 'latest', query)
-
-    @faq.command(name='rewrite')
-    async def faq_rewrite(self, ctx, *, query=None):
-        await self.do_faq(ctx, 'rewrite', query)
 
 def setup(bot):
     bot.add_cog(API(bot))

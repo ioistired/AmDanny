@@ -1,13 +1,15 @@
 from discord.ext import commands
 from collections import Counter, defaultdict
 
-from .utils import checks, db
+from .utils import checks, db, time
 from .utils.paginator import CannotPaginate
 
 import logging
 import discord
 import datetime
+import itertools
 import asyncio
+import pygit2
 import psutil
 import json
 import os
@@ -86,20 +88,26 @@ class Stats(commands.Cog):
         """Tells you how long the bot has been up for."""
         await ctx.send(f'Uptime: **{self.get_bot_uptime()}**')
 
+    def format_commit(self, commit):
+        short, _, _ = commit.message.partition('\n')
+        short_sha2 = commit.hex[0:6]
+        commit_tz = datetime.timezone(datetime.timedelta(minutes=commit.commit_time_offset))
+        commit_time = datetime.datetime.fromtimestamp(commit.commit_time).replace(tzinfo=commit_tz)
+
+        # [`hash`](url) message (offset)
+        offset = time.human_timedelta(commit_time.astimezone(datetime.timezone.utc).replace(tzinfo=None), accuracy=1)
+        return f'[`{short_sha2}`](https://github.com/Rapptz/RoboDanny/commit/{commit.hex}) {short} ({offset})'
+
+    def get_last_commits(self, count=3):
+        repo = pygit2.Repository('.git')
+        commits = list(itertools.islice(repo.walk(repo.head.target, pygit2.GIT_SORT_TOPOLOGICAL), count))
+        return '\n'.join(self.format_commit(c) for c in commits)
+
     @commands.command()
     async def about(self, ctx):
         """Tells you information about the bot itself."""
-        cmd = r'git show -s HEAD~3..HEAD --format="[{}](https://github.com/Rapptz/RoboDanny/commit/%H) %s (%cr)"'
-        if os.name == 'posix':
-            cmd = cmd.format(r'\`%h\`')
-        else:
-            cmd = cmd.format(r'`%h`')
 
-        try:
-            revision = os.popen(cmd).read().strip()
-        except OSError:
-            revision = 'Could not fetch due to memory error. Sorry.'
-
+        revision = self.get_last_commits()
         embed = discord.Embed(description='Latest Changes:\n' + revision)
         embed.title = 'Official Bot Server Invite'
         embed.url = 'https://discord.gg/DWEaqMy'
@@ -109,8 +117,13 @@ class Stats(commands.Cog):
         embed.set_author(name=str(owner), icon_url=owner.avatar_url)
 
         # statistics
-        total_members = sum(1 for _ in self.bot.get_all_members())
-        total_online = len({m.id for m in self.bot.get_all_members() if m.status is not discord.Status.offline})
+        total_members = 0
+        total_online = 0
+        for member in self.bot.get_all_members():
+            total_members += 1
+            if member.status is not discord.Status.offline:
+                total_online += 1
+
         total_unique = len(self.bot.users)
 
         voice_channels = []
