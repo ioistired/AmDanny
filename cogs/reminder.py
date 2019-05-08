@@ -140,6 +140,9 @@ class Reminder(commands.Cog):
         connection: asyncpg.Connection
             Special keyword-only argument to use a specific connection
             for the DB request.
+        created: datetime.datetime
+            Special keyword-only argument to use as the creation time.
+            Should make the timedeltas a bit more consistent.
 
         Note
         ------
@@ -156,13 +159,12 @@ class Reminder(commands.Cog):
         except KeyError:
             connection = self.bot.pool
 
-        now = datetime.datetime.utcnow()
-        timer = Timer.temporary(
-            event=event,
-            args=args,
-            kwargs=kwargs,
-            expires=when,
-            created=now)
+        try:
+            now = kwargs.pop('created')
+        except KeyError:
+            now = datetime.datetime.utcnow()
+
+        timer = Timer.temporary(event=event, args=args, kwargs=kwargs, expires=when, created=now)
         delta = (when - now).total_seconds()
         if delta <= 60:
             # a shortcut for small timers
@@ -221,6 +223,7 @@ class Reminder(commands.Cog):
                                                              ctx.channel.id,
                                                              when.arg,
                                                              connection=ctx.db,
+                                                             created=ctx.message.created_at,
                                                              message_id=ctx.message.id)
         delta = time.human_timedelta(when.dt, source=timer.created_at)
         await ctx.send(f'Alright {self.message_mention(ctx.message)}, in {delta}: {when.arg}')

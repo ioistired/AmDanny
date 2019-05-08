@@ -976,7 +976,11 @@ class Mod(commands.Cog):
             return await ctx.send('Sorry, this functionality is currently unavailable. Try again later?')
 
         await ctx.guild.ban(discord.Object(id=member), reason=reason)
-        timer = await reminder.create_timer(duration.dt, 'tempban', ctx.guild.id, ctx.author.id, member, connection=ctx.db)
+        timer = await reminder.create_timer(duration.dt, 'tempban', ctx.guild.id,
+                                                                    ctx.author.id,
+                                                                    member,
+                                                                    connection=ctx.db,
+                                                                    created=ctx.message.created_at)
         await ctx.send(f'Banned ID {member} for {time.human_timedelta(duration.dt, source=timer.created_at)}.')
 
     @commands.Cog.listener()
