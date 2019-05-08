@@ -169,13 +169,12 @@ class Reminder(commands.Cog):
             self.bot.loop.create_task(self.short_timer_optimisation(delta, timer))
             return timer
 
-        query = """
-            INSERT INTO reminders (event, extra, expires)
-            VALUES ($1, $2::jsonb, $3)
-            RETURNING id;
-        """
+        query = """INSERT INTO reminders (event, extra, expires, created)
+                   VALUES ($1, $2::jsonb, $3, $4)
+                   RETURNING id;
+                """
 
-        timer.id = await connection.fetchval(query, event, {'args': args, 'kwargs': kwargs}, when)
+        row = await connection.fetchval(query, event, { 'args': args, 'kwargs': kwargs }, when, now)
 
         # only set the data check if it can be waited on
         if delta <= (86400 * 40): # 40 days
@@ -216,30 +215,26 @@ class Reminder(commands.Cog):
         Times are in UTC.
         """
 
-        timer = await self.create_timer(
-            when.dt,
-            'reminder',
-            ctx.message.webhook_id and ctx.author.name,
-            ctx.author.id,
-            ctx.channel.id,
-            when.arg,
-            connection=ctx.db,
-            message_id=ctx.message.id)
-
         delta = time.human_timedelta(when.dt)
+        timer = await self.create_timer(when.dt, 'reminder', ctx.message.webhook_id and ctx.author.name,
+                                                             ctx.author.id,
+                                                             ctx.channel.id,
+                                                             when.arg,
+                                                             connection=ctx.db,
+                                                             message_id=ctx.message.id)
+        delta = time.human_timedelta(when.dt, source=timer.created_at)
         await ctx.send(f'Alright {self.message_mention(ctx.message)}, in {delta}: {when.arg}')
 
     @reminder.command(name='list')
     async def reminder_list(self, ctx):
         """Shows the 10 latest currently running reminders."""
-        query = """
-            SELECT id, expires, extra #>> '{args,3}'
-            FROM reminders
-            WHERE event = 'reminder'
-            AND extra #>> '{args,1}' = $1
-            ORDER BY expires
-            LIMIT 10;
-        """
+        query = """SELECT id, expires, created, extra #>> '{args,3}'
+                   FROM reminders
+                   WHERE event = 'reminder'
+                   AND extra #>> '{args,1}' = $1
+                   ORDER BY expires
+                   LIMIT 10;
+                """
 
         records = await ctx.db.fetch(query, str(ctx.author.id))
 
@@ -252,8 +247,8 @@ class Reminder(commands.Cog):
         else:
             out.write(f'**{len(records)} Reminder{"s" if len(records) > 1 else ""}**:\n')
 
-        for _id, expires, message in records:
-            out.write(f'**{_id}: In {time.human_timedelta(expires)}**\n')
+        for _id, expires, created, message in records:
+            out.write(f'**{_id}: In {time.human_timedelta(expires, source=created)}**\n')
             out.write(message + '\n')
 
         await ctx.send(out.getvalue())

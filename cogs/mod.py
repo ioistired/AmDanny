@@ -975,22 +975,8 @@ class Mod(commands.Cog):
         if reminder is None:
             return await ctx.send('Sorry, this functionality is currently unavailable. Try again later?')
 
-        until = f'until {duration.dt:%Y-%m-%dT%H:%M UTC}'
-        heads_up_message = f'You have been banned from {ctx.guild.name} {until}. Reason: {reason}'
-
-        try:
-            await member.send(heads_up_message)
-        except (AttributeError, discord.HTTPException):
-            # best attempt, oh well.
-            pass
-
-        reason = safe_reason_append(reason, until)
-        await ctx.guild.ban(member, reason=reason)
-        timer = await reminder.create_timer(duration.dt, 'tempban', ctx.guild.id,
-                                                                    ctx.author.id,
-                                                                    member,
-                                                                    connection=ctx.db,
-                                                                    created=ctx.message.created_at)
+        await ctx.guild.ban(discord.Object(id=member), reason=reason)
+        timer = await reminder.create_timer(duration.dt, 'tempban', ctx.guild.id, ctx.author.id, member, connection=ctx.db)
         await ctx.send(f'Banned ID {member} for {time.human_timedelta(duration.dt, source=timer.created_at)}.')
 
     @commands.Cog.listener()
