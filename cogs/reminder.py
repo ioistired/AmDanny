@@ -12,7 +12,6 @@ class Reminders(db.Table):
     expires = db.Column(db.Datetime, index=True)
     created = db.Column(db.Datetime, default="now() at time zone 'utc'")
     event = db.Column(db.String)
-    author_name = db.Column(db.String)
     extra = db.Column(db.JSON, default="'{}'::jsonb")
 
 class Timer:
@@ -25,17 +24,15 @@ class Timer:
         self.args = extra.get('args', [])
         self.kwargs = extra.get('kwargs', {})
         self.event = record['event']
-        self.author_name = record['author_name']
         self.created_at = record['created']
         self.expires = record['expires']
 
     @classmethod
-    def temporary(cls, *, expires, created, event, author_name, args, kwargs):
+    def temporary(cls, *, expires, created, event, args, kwargs):
         pseudo = {
             'id': None,
             'extra': { 'args': args, 'kwargs': kwargs },
             'event': event,
-            'author_name': author_name,
             'created': created,
             'expires': expires
         }
@@ -152,7 +149,7 @@ class Reminder(commands.Cog):
         --------
         :class:`Timer`
         """
-        when, event, author_name, *args = args
+        when, event, *args = args
 
         try:
             connection = kwargs.pop('connection')
@@ -163,7 +160,6 @@ class Reminder(commands.Cog):
         timer = Timer.temporary(
             event=event,
             args=args,
-            author_name=author_name,
             kwargs=kwargs,
             expires=when,
             created=now)
@@ -174,13 +170,12 @@ class Reminder(commands.Cog):
             return timer
 
         query = """
-            INSERT INTO reminders (event, author_name, extra, expires)
-            VALUES ($1, $2, $3::jsonb, $4)
+            INSERT INTO reminders (event, extra, expires)
+            VALUES ($1, $2::jsonb, $3)
             RETURNING id;
         """
 
-        row = await connection.fetchrow(query, event, author_name, {'args': args, 'kwargs': kwargs}, when)
-        timer.id = row[0]
+        timer.id = await connection.fetchval(query, event, {'args': args, 'kwargs': kwargs}, when)
 
         # only set the data check if it can be waited on
         if delta <= (86400 * 40): # 40 days
@@ -293,7 +288,7 @@ class Reminder(commands.Cog):
 
     @commands.Cog.listener()
     async def on_reminder_timer_complete(self, timer):
-        author_id, channel_id, message = timer.args
+        author_name, author_id, channel_id, message = timer.args
 
         channel = self.bot.get_channel(channel_id)
         if channel is None:
@@ -306,7 +301,7 @@ class Reminder(commands.Cog):
 
         guild_id = channel.guild.id if isinstance(channel, discord.TextChannel) else '@me'
         message_id = timer.kwargs.get('message_id')
-        msg = f'{self.mention(name=timer.author_name, id=author_id)}, {timer.human_delta}: {message}'
+        msg = f'{self.mention(name=author_name, id=author_id)}, {timer.human_delta}: {message}'
 
         if message_id:
             msg = f'{msg}\n\n<https://discordapp.com/channels/{guild_id}/{channel.id}/{message_id}>'
