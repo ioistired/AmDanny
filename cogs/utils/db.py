@@ -498,7 +498,7 @@ class TableMeta(type):
 class Table(metaclass=TableMeta):
     @classmethod
     async def create_pool(cls, uri, **kwargs):
-        """Sets up and returns the PostgreSQL connection pool that is used.
+        r"""Sets up and returns the PostgreSQL connection pool that is used.
 
         .. note::
 
