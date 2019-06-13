@@ -290,6 +290,7 @@ class Reminder(commands.Cog):
     async def on_reminder_timer_complete(self, timer):
         author_name, author_id, channel_id, message = timer.args
 
+        await self.bot.wait_until_ready()
         channel = self.bot.get_channel(channel_id)
         if channel is None:
             # Check if it's a DM channel
