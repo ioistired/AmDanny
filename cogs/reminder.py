@@ -15,7 +15,7 @@ class Reminders(db.Table):
     extra = db.Column(db.JSON, default="'{}'::jsonb")
 
 class Timer:
-    __slots__ = frozenset(('args', 'kwargs', 'event', 'author_name', 'id', 'created_at', 'expires'))
+    __slots__ = frozenset(('args', 'kwargs', 'event', 'id', 'created_at', 'expires'))
 
     def __init__(self, *, record):
         self.id = record['id']
