@@ -1,6 +1,7 @@
 asyncpg>=0.12.0
 ben_cogs
 click
+dpy-ui
 git+https://github.com/Rapptz/discord.py@master
 lru-dict
 lxml

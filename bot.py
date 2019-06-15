@@ -29,6 +29,7 @@ initial_extensions = (
     'cogs.admin',
     'cogs.rng',
     'cogs.stalking',
+    'cogs.connect4',
     'jishaku',
     'ben_cogs.misc',
     'ben_cogs.debug',
