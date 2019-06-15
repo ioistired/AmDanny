@@ -29,11 +29,11 @@ class Connect4Game:
 
 	def is_playable(self, col):
 		"""return whether the column has room"""
-		return self.is_legal(self.boards[self.plies & 1] | (1 << self.lowest_free_squares[col]))
+		return self.is_legal(self.boards[self.turns & 1] | (1 << self.lowest_free_squares[col]))
 
 	def is_legal(self, board):
 		"""return whether the board lacks an overflowing column"""
-		return board & TOP == 0
+		return board & self.TOP == 0
 
 	def has_won(self, player):
 		board = self.boards[player]
