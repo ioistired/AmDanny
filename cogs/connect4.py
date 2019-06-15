@@ -33,7 +33,7 @@ class Connect4Game:
 
 	def is_legal(self, board):
 		"""return whether the board lacks an overflowing column"""
-		return self.boards[self.turns & 1] & TOP == 0
+		return board & TOP == 0
 
 	def has_won(self, player):
 		board = self.boards[player]
