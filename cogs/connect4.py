@@ -145,16 +145,17 @@ class Connect4Session(ui.Session):
 		self.game.move(col)
 		await self.message.edit(content=await self.get_current_message())
 
-	def forfeit_string(self):
-		player_i = self.game.whomst_turn()
+	def forfeit_string(self, player_i):
 		player = self.players[player_i]
+		player_piece = self.game.PIECES[player_i]
 		winner_i = (player_i + 1) & 1
 		winner = self.players[winner_i]
 		winner_piece = self.game.PIECES[winner_i]
-		return discord.utils.escape_mentions(f'{winner} (`{winner_piece}`) won ({player} forfeited)')
+		return discord.utils.escape_mentions(f'{winner} (`{winner_piece}`) won ({player} (`{player_piece}`) forfeited)')
 
 	async def forfeit(self, payload):
-		message = await self.get_current_message(append_player=False) + self.forfeit_string()
+		whomst = self.players.index(self.context.bot.get_user(payload.user_id))
+		message = await self.get_current_message(append_player=False) + self.forfeit_string(whomst)
 		await self.message.edit(content=message)
 		await self.stop()
 
