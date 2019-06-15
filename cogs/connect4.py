@@ -141,6 +141,8 @@ class Connect4Session(ui.Session):
 		player = self.game.whomst_turn()
 		if payload.user_id != self.players[player].id:
 			return
+		if not self.game.is_playable(col):
+			return
 
 		self.game.move(col)
 		await self.message.edit(content=await self.get_current_message())
