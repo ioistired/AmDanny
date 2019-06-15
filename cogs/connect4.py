@@ -124,12 +124,12 @@ class Connect4Session(ui.Session):
 		message = str(self.game)
 
 		won = self.won_string()
-		message += won
+		if won:
+			await self.stop()
 
 		if append_player:
-			if won:
-				await self.stop()
-			else:
+			message += won
+			if not won:
 				message += self.current_player_string()
 
 		return discord.utils.escape_mentions(message)
