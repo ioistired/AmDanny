@@ -236,7 +236,7 @@ class Reminder(commands.Cog):
             SELECT id, expires, extra #>> '{args,2}'
             FROM reminders
             WHERE event = 'reminder'
-            AND extra #>> '{args,0}' = $1
+            AND extra #>> '{args,1}' = $1
             ORDER BY expires
             LIMIT 10;
         """
@@ -271,7 +271,7 @@ class Reminder(commands.Cog):
             DELETE FROM reminders
             WHERE id=$1
             AND event = 'reminder'
-            AND extra #>> '{args,0}' = $2;
+            AND extra #>> '{args,1}' = $2;
         """
 
         status = await ctx.db.execute(query, id, str(ctx.author.id))
