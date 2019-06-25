@@ -233,7 +233,7 @@ class Reminder(commands.Cog):
     async def reminder_list(self, ctx):
         """Shows the 10 latest currently running reminders."""
         query = """
-            SELECT id, expires, extra #>> '{args,2}'
+            SELECT id, expires, extra #>> '{args,3}'
             FROM reminders
             WHERE event = 'reminder'
             AND extra #>> '{args,1}' = $1
