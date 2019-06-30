@@ -358,8 +358,11 @@ class API(commands.Cog):
         if len(matches) == 0:
             return await ctx.send('Nothing found…')
 
-        fmt = '\n'.join(f'**{key}**\n{value}' for key, _, value in matches)
-        await ctx.send(fmt)
+        paginator = commands.Paginator(suffix='', prefix='')
+        for key, _, value in matches:
+            paginator.add_line(f'**{key}**\n{value}')
+        page = paginator.pages[0]
+        await ctx.send(page)
 
 def setup(bot):
     bot.add_cog(API(bot))
