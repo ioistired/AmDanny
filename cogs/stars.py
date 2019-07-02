@@ -1,6 +1,6 @@
-from discord.ext import commands
+from discord.ext import commands, tasks
 from .utils import checks, db, cache
-from .utils.formats import Plural, human_join
+from .utils.formats import plural, human_join
 from .utils.paginator import Pages
 from collections import Counter, defaultdict
 
@@ -109,7 +109,7 @@ class Stars(commands.Cog):
 
         # cache message objects to save Discord some HTTP requests.
         self._message_cache = {}
-        self._cleaner = self.bot.loop.create_task(self.clean_message_cache())
+        self.clean_message_cache.start()
 
         # if it's in this set,
         self._about_to_be_deleted = set()
@@ -117,19 +117,15 @@ class Stars(commands.Cog):
         self._locks = weakref.WeakValueDictionary()
 
     def cog_unload(self):
-        self._cleaner.cancel()
+        self.clean_message_cache.cancel()
 
     async def cog_command_error(self, ctx, error):
         if isinstance(error, StarError):
             await ctx.send(error)
 
+    @tasks.loop(hours=1.0)
     async def clean_message_cache(self):
-        try:
-            while not self.bot.is_closed():
-                self._message_cache.clear()
-                await asyncio.sleep(3600)
-        except asyncio.CancelledError:
-            pass
+        self._message_cache.clear()
 
     @cache.cache(strategy=cache.Strategy.raw)
     async def get_starboard(self, guild_id, *, connection=None):
@@ -345,16 +341,17 @@ class Stars(commands.Cog):
 
         guild_id = channel.guild.id
         starboard = await self.get_starboard(guild_id)
-        if starboard.channel is None:
+        starboard_channel = starboard.channel
+        if starboard_channel is None:
             raise StarError('\N{WARNING SIGN} Starboard channel not found.')
 
         if starboard.locked:
             raise StarError('\N{NO ENTRY SIGN} Starboard is locked.')
 
-        if channel.is_nsfw() and not starboard.channel.is_nsfw():
+        if channel.is_nsfw() and not starboard_channel.is_nsfw():
             raise StarError('\N{NO ENTRY SIGN} Cannot star NSFW in non-NSFW starboard channel.')
 
-        if channel.id == starboard.channel.id:
+        if channel.id == starboard_channel.id:
             # special case redirection code goes here
             # ergo, when we add a reaction from starboard we want it to star
             # the original message
@@ -369,6 +366,9 @@ class Stars(commands.Cog):
                 raise StarError('Could not find original channel.')
 
             return await self._star_message(ch, record['message_id'], starrer_id, connection=connection)
+
+        if not starboard_channel.permissions_for(starboard_channel.guild.me).send_messages:
+            raise StarError('\N{NO ENTRY SIGN} Cannot post messages in starboard channel.')
 
         msg = await self.get_message(channel, message_id)
 
@@ -427,11 +427,11 @@ class Stars(commands.Cog):
         bot_message_id = record[0]
 
         if bot_message_id is None:
-            new_msg = await starboard.channel.send(content, embed=embed)
+            new_msg = await starboard_channel.send(content, embed=embed)
             query = "UPDATE starboard_entries SET bot_message_id=$1 WHERE message_id=$2;"
             await connection.execute(query, new_msg.id, message_id)
         else:
-            new_msg = await self.get_message(starboard.channel, bot_message_id)
+            new_msg = await self.get_message(starboard_channel, bot_message_id)
             if new_msg is None:
                 # deleted? might as well purge the data
                 query = "DELETE FROM starboard_entries WHERE message_id=$1;"
@@ -476,13 +476,14 @@ class Stars(commands.Cog):
 
         guild_id = channel.guild.id
         starboard = await self.get_starboard(guild_id)
-        if starboard.channel is None:
+        starboard_channel = starboard.channel
+        if starboard_channel is None:
             raise StarError('\N{WARNING SIGN} Starboard channel not found.')
 
         if starboard.locked:
             raise StarError('\N{NO ENTRY SIGN} Starboard is locked.')
 
-        if channel.id == starboard.channel.id:
+        if channel.id == starboard_channel.id:
             query = "SELECT channel_id, message_id FROM starboard_entries WHERE bot_message_id=$1;"
             record = await connection.fetchrow(query, message_id)
             if record is None:
@@ -493,6 +494,9 @@ class Stars(commands.Cog):
                 raise StarError('Could not find original channel.')
 
             return await self._unstar_message(ch, record['message_id'], starrer_id, connection=connection)
+
+        if not starboard_channel.permissions_for(starboard_channel.guild.me).send_messages:
+            raise StarError('\N{NO ENTRY SIGN} Cannot edit messages in starboard channel.')
 
         query = """DELETE FROM starrers USING starboard_entries entry
                    WHERE entry.message_id=$1
@@ -520,7 +524,7 @@ class Stars(commands.Cog):
         if bot_message_id is None:
             return
 
-        bot_message = await self.get_message(starboard.channel, bot_message_id)
+        bot_message = await self.get_message(starboard_channel, bot_message_id)
         if bot_message is None:
             return
 
@@ -618,8 +622,8 @@ class Stars(commands.Cog):
             data.append(f'NSFW: {channel.is_nsfw()}')
 
         data.append(f'Locked: {starboard.locked}')
-        data.append(f'Limit: {Plural(star=starboard.threshold)}')
-        data.append(f'Max Age: {Plural(day=starboard.max_age.days)}')
+        data.append(f'Limit: {plural(starboard.threshold):star}')
+        data.append(f'Max Age: {plural(starboard.max_age.days):day}')
         await ctx.send('\n'.join(data))
 
     @commands.group(invoke_without_command=True, ignore_extra=False)
@@ -705,7 +709,7 @@ class Stars(commands.Cog):
         except discord.HTTPException:
             await ctx.send('Could not delete messages.')
         else:
-            await ctx.send(f'\N{PUT LITTER IN ITS PLACE SYMBOL} Deleted {Plural(message=len(to_delete))}.')
+            await ctx.send(f'\N{PUT LITTER IN ITS PLACE SYMBOL} Deleted {plural(len(to_delete)):message}.')
 
     @star.command(name='show')
     @requires_starboard()
@@ -786,11 +790,11 @@ class Stars(commands.Cog):
 
         try:
             p = Pages(ctx, entries=members, per_page=20, show_entry_count=False)
-            base = Plural(star=len(records))
+            base = format(plural(len(records)), 'star')
             if len(records) > len(members):
                 p.embed.title = f'{base} ({len(records) - len(members)} left server)'
             else:
-                p.embed.title = str(base)
+                p.embed.title = base
             await p.paginate()
         except Exception as e:
             await ctx.send(e)
@@ -872,7 +876,7 @@ class Stars(commands.Cog):
 
         emoji = 0x1f947 # :first_place:
         fmt = fmt or (lambda o: o)
-        return '\n'.join(f'{chr(emoji + i)}: {fmt(r["ID"])} ({Plural(star=r["Stars"])})'
+        return '\n'.join(f'{chr(emoji + i)}: {fmt(r["ID"])} ({plural(r["Stars"]):star})'
                          for i, r in enumerate(records))
 
     async def star_guild_stats(self, ctx):
@@ -897,7 +901,7 @@ class Stars(commands.Cog):
         record = await ctx.db.fetchrow(query, ctx.guild.id)
         total_stars = record[0]
 
-        e.description = f'{Plural(message=total_messages)} starred with a total of {total_stars} stars.'
+        e.description = f'{plural(total_messages):message} starred with a total of {total_stars} stars.'
         e.colour = discord.Colour.gold()
 
         # this big query fetches 3 things:
@@ -1131,7 +1135,7 @@ class Stars(commands.Cog):
         await ctx.db.execute(query, ctx.guild.id, stars)
         self.get_starboard.invalidate(self, ctx.guild.id)
 
-        await ctx.send(f'Messages now require {Plural(star=stars)} to show up in the starboard.')
+        await ctx.send(f'Messages now require {plural(stars):star} to show up in the starboard.')
 
     @star.command(name='age')
     @checks.is_mod()

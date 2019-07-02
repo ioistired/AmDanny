@@ -33,7 +33,6 @@ initial_extensions = (
     'jishaku',
     'ben_cogs.misc',
     'ben_cogs.debug',
-    'cogs.stats',
     'cogs.config',
 )
 
@@ -66,6 +65,14 @@ class RoboDanny(commands.AutoShardedBot):
         # these are users and guilds globally blacklisted
         # from using the bot
         self.blacklist = Config('blacklist.json')
+
+        # in case of even further spam, add a cooldown mapping
+        # for people who excessively spam commands
+        self.spam_control = commands.CooldownMapping.from_cooldown(10, 12.0, commands.BucketType.user)
+
+        # A counter to auto-ban frequent spammers
+        # Triggering the rate limit 5 times in a row will auto-ban the user from the bot.
+        self._auto_spam_count = Counter()
 
         for extension in initial_extensions:
             try:
@@ -139,6 +146,22 @@ class RoboDanny(commands.AutoShardedBot):
 
         if ctx.guild is not None and ctx.guild.id in self.blacklist:
             return
+
+        bucket = self.spam_control.get_bucket(message)
+        current = message.created_at.replace(tzinfo=datetime.timezone.utc).timestamp()
+        retry_after = bucket.update_rate_limit(current)
+        author_id = message.author.id
+        if retry_after and author_id != self.owner_id:
+            self._auto_spam_count[author_id] += 1
+            if self._auto_spam_count[author_id] >= 2:
+                await self.add_to_blacklist(author_id)
+                del self._auto_spam_count[author_id]
+                await self.log_spammer(ctx, message, retry_after, autoblock=True)
+            else:
+                self.log_spammer(ctx, message, retry_after)
+            return
+        else:
+            self._auto_spam_count.pop(author_id, None)
 
         try:
             await self.invoke(ctx)

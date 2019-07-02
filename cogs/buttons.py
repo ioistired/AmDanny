@@ -12,6 +12,20 @@ from .utils import checks
 
 log = logging.getLogger(__name__)
 
+def date(argument):
+    formats = (
+        '%Y/%m/%d',
+        '%Y-%m-%d',
+    )
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(argument, fmt)
+        except ValueError:
+            continue
+
+    raise commands.BadArgument('Cannot convert to date. Expected YYYY/MM/DD or YYYY-MM-DD.')
+
 class Buttons(commands.Cog):
     """Buttons that make you feel."""
 
@@ -47,6 +61,37 @@ class Buttons(commands.Cog):
     async def hello(self, ctx):
         """Displays my intro message."""
         await ctx.send('Hello! I\'m a robot! Danny#0007 made me.')
+
+    @commands.command(pass_context=True)
+    @checks.mod_or_permissions(manage_messages=True)
+    async def nostalgia(self, ctx, date: date, *, channel: discord.TextChannel = None):
+        """Pins an old message from a specific date.
+
+        If a channel is not given, then pins from the channel the
+        command was ran on.
+
+        The format of the date must be either YYYY-MM-DD or YYYY/MM/DD.
+        """
+        channel = channel or ctx.channel
+
+        message = await channel.history(after=date, limit=1).flatten()
+
+        if len(message) == 0:
+            return await ctx.send('Could not find message.')
+
+        message = message[0]
+
+        try:
+            await message.pin()
+        except discord.HTTPException:
+            await ctx.send('Could not pin message.')
+        else:
+            await ctx.send('Pinned message.')
+
+    @nostalgia.error
+    async def nostalgia_error(self, ctx, error):
+        if isinstance(error, commands.BadArgument):
+            await ctx.send(error)
 
     @commands.command()
     async def charinfo(self, ctx, *, characters: str):

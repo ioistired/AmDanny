@@ -1,5 +1,5 @@
 from discord.ext import commands
-from .utils import checks, formats
+from .utils import checks, formats, time
 from .utils.paginator import Pages
 import discord
 from collections import OrderedDict, deque, Counter
@@ -9,6 +9,7 @@ import copy
 import unicodedata
 import inspect
 import itertools
+from typing import Union
 
 class Prefix(commands.Converter):
     async def convert(self, ctx, argument):
@@ -17,6 +18,17 @@ class Prefix(commands.Converter):
             raise commands.BadArgument('That is a reserved prefix already in use.')
         return argument
 
+class FetchedUser(commands.Converter):
+    async def convert(self, ctx, argument):
+        if not argument.isdigit():
+            raise commands.BadArgument('Not a valid user ID.')
+        try:
+            return await ctx.bot.fetch_user(argument)
+        except discord.NotFound:
+            raise commands.BadArgument('User not found.') from None
+        except discord.HTTPException:
+            raise commands.BadArgument('An error occurred while fetching the user.') from None
+
 class HelpPaginator(Pages):
     def __init__(self, help_command, ctx, entries, *, per_page=4):
         super().__init__(ctx, entries=entries, per_page=per_page)
@@ -24,6 +36,7 @@ class HelpPaginator(Pages):
         self.total = len(entries)
         self.help_command = help_command
         self.prefix = help_command.clean_prefix
+        self.is_bot = False
 
     def get_bot_page(self, page):
         cog, description, commands = self.entries[page - 1]
@@ -36,7 +49,7 @@ class HelpPaginator(Pages):
         self.embed.description = self.description
         self.embed.title = self.title
 
-        if self.get_page is self.get_bot_page:
+        if self.is_bot:
             value ='For more help, join the official bot support server: https://discord.gg/DWEaqMy'
             self.embed.add_field(name='Support', value=value, inline=False)
 
@@ -147,6 +160,7 @@ class PaginatedHelpCommand(commands.HelpCommand):
 
         # swap the get_page implementation to work with our nested pages.
         pages.get_page = pages.get_bot_page
+        pages.is_bot = True
         pages.total = total
         await self.context.release()
         await pages.paginate()
@@ -299,67 +313,85 @@ class Meta(commands.Cog):
         or by spaces.
         """
         source_url = 'https://github.com/bmintz/AmDanny'
+        branch = 'rewrite'
         if command is None:
             return await ctx.send(source_url)
 
-        obj = self.bot.get_command(command.replace('.', ' '))
-        if obj is None:
-            return await ctx.send('Could not find command.')
-
-        # since we found the command we're looking for, presumably anyway, let's
-        # try to access the code itself
-        src = obj.callback.__code__
-        lines, firstlineno = inspect.getsourcelines(src)
-        if not obj.callback.__module__.startswith('discord'):
-            # not a built-in command
-            location = os.path.relpath(src.co_filename).replace('\\', '/')
+        if command == 'help':
+            src = type(self.bot.help_command)
+            module = src.__module__
+            filename = inspect.getsourcefile(src)
         else:
-            location = obj.callback.__module__.replace('.', '/') + '.py'
-            source_url = 'https://github.com/Rapptz/discord.py'
+            obj = self.bot.get_command(command.replace('.', ' '))
+            if obj is None:
+                return await ctx.send('Could not find command.')
 
-        final_url = f'<{source_url}/blob/rewrite/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
+            # since we found the command we're looking for, presumably anyway, let's
+            # try to access the code itself
+            src = obj.callback.__code__
+            module = obj.callback.__module__
+            filename = src.co_filename
+
+        lines, firstlineno = inspect.getsourcelines(src)
+        if not module.startswith('discord'):
+            # not a built-in command
+            location = os.path.relpath(filename).replace('\\', '/')
+        else:
+            location = module.replace('.', '/') + '.py'
+            source_url = 'https://github.com/Rapptz/discord.py'
+            branch = 'master'
+
+        final_url = f'<{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
         await ctx.send(final_url)
 
-    @commands.group(invoke_without_command=True)
-    @commands.guild_only()
-    async def info(self, ctx, *, member: discord.Member = None):
-        """Shows info about a member.
+    @commands.command()
+    async def info(self, ctx, *, user: Union[discord.User, FetchedUser] = None):
+        """Shows info about a user."""
 
-        This cannot be used in private messages. If you don't specify
-        a member then the info returned will be yours.
-        """
-
-        if member is None:
-            member = ctx.author
+        user = user or ctx.author
+        if ctx.guild and isinstance(user, discord.User):
+            user = ctx.guild.get_member(user.id) or user
 
         e = discord.Embed()
-        roles = [role.name.replace('@', '@\u200b') for role in member.roles]
-        shared = sum(1 for m in self.bot.get_all_members() if m.id == member.id)
-        voice = member.voice
+        roles = [role.name.replace('@', '@\u200b') for role in getattr(user, 'roles', [])]
+        shared = sum(g.get_member(user.id) is not None for g in self.bot.guilds)
+        e.set_author(name=str(user))
+
+        def format_date(dt):
+            if dt is None:
+                return 'N/A'
+            return f'{dt:%Y-%m-%d %H:%M} ({time.human_timedelta(dt, accuracy=3)})'
+
+        e.add_field(name='ID', value=user.id, inline=False)
+        e.add_field(name='Servers', value=f'{shared} shared', inline=False)
+        e.add_field(name='Joined', value=format_date(getattr(user, 'joined_at', None)), inline=False)
+        e.add_field(name='Created', value=format_date(user.created_at), inline=False)
+
+        voice = getattr(user, 'voice', None)
         if voice is not None:
             vc = voice.channel
             other_people = len(vc.members) - 1
             voice = f'{vc.name} with {other_people} others' if other_people else f'{vc.name} by themselves'
-        else:
-            voice = 'Not connected.'
+            e.add_field(name='Voice', value=voice, inline=False)
 
-        e.set_author(name=str(member))
-        e.set_footer(text='Member since').timestamp = member.joined_at
-        e.add_field(name='ID', value=member.id)
-        e.add_field(name='Servers', value=f'{shared} shared')
-        e.add_field(name='Created', value=member.created_at)
-        e.add_field(name='Voice', value=voice)
-        e.add_field(name='Roles', value=', '.join(roles) if len(roles) < 10 else f'{len(roles)} roles')
-        e.colour = member.colour
+        if roles:
+            e.add_field(name='Roles', value=', '.join(roles) if len(roles) < 10 else f'{len(roles)} roles', inline=False)
 
-        if member.avatar:
-            e.set_thumbnail(url=member.avatar_url)
+        colour = user.colour
+        if colour.value:
+            e.colour = colour
+
+        if user.avatar:
+            e.set_thumbnail(url=user.avatar_url)
+
+        if isinstance(user, discord.User):
+            e.set_footer(text='This member is not in this server.')
 
         await ctx.send(embed=e)
 
-    @info.command(name='server', aliases=['guild'])
+    @commands.command(aliases=['guildinfo'])
     @commands.guild_only()
-    async def server_info(self, ctx):
+    async def serverinfo(self, ctx):
         """Shows info about the current server."""
 
         guild = ctx.guild
@@ -374,24 +406,21 @@ class Meta(commands.Cog):
         secret_member.roles = [guild.default_role]
 
         # figure out what channels are 'secret'
-        secret_channels = 0
-        secret_voice = 0
-        text_channels = 0
+        secret = Counter()
+        totals = Counter()
         for channel in guild.channels:
             perms = channel.permissions_for(secret_member)
-            is_text = isinstance(channel, discord.TextChannel)
-            text_channels += is_text
-            if is_text and not perms.read_messages:
-                secret_channels += 1
-            elif not is_text and (not perms.connect or not perms.speak):
-                secret_voice += 1
+            channel_type = type(channel)
+            totals[channel_type] += 1
+            if not perms.read_messages:
+                secret[channel_type] += 1
+            elif isinstance(channel, discord.VoiceChannel) and (not perms.connect or not perms.speak):
+                secret[channel_type] += 1
 
-        regular_channels = len(guild.channels) - secret_channels
-        voice_channels = len(guild.channels) - text_channels
         member_by_status = Counter(str(m.status) for m in guild.members)
 
         e = discord.Embed()
-        e.title = 'Info for ' + guild.name
+        e.title = guild.name
         e.add_field(name='ID', value=guild.id)
         e.add_field(name='Owner', value=guild.owner)
         if guild.icon:
@@ -400,17 +429,55 @@ class Meta(commands.Cog):
         if guild.splash:
             e.set_image(url=guild.splash_url)
 
+        channel_info = []
+        key_to_emoji = {
+            discord.TextChannel: '<:text_channel:586339098172850187>',
+            discord.VoiceChannel: '<:voice_channel:586339098524909604>',
+        }
+        for key, total in totals.items():
+            secrets = secret[key]
+            try:
+                emoji = key_to_emoji[key]
+            except KeyError:
+                continue
+
+            if secrets:
+                channel_info.append(f'{emoji} {total} ({secrets} locked)')
+            else:
+                channel_info.append(f'{emoji} {total}')
+
         info = []
-        info.append(ctx.tick(len(guild.features) >= 3, 'Partnered'))
+        features = set(guild.features)
+        all_features = {
+            'PARTNERED': 'Partnered',
+            'VERIFIED': 'Verified',
+            'DISCOVERABLE': 'Server Discovery',
+            'INVITE_SPLASH': 'Invite Splash',
+            'VIP_REGIONS': 'VIP Voice Servers',
+            'VANITY_URL': 'Vanity Invite',
+            'MORE_EMOJI': 'More Emoji',
+            'COMMERCE': 'Commerce',
+            'LURKABLE': 'Lurkable',
+            'NEWS': 'News Channels',
+            'ANIMATED_ICON': 'Animated Icon',
+            'BANNER': 'Banner'
+        }
 
-        sfw = guild.explicit_content_filter is not discord.ContentFilter.disabled
-        info.append(ctx.tick(sfw, 'Scanning Images'))
-        info.append(ctx.tick(guild.member_count > 100, 'Large'))
+        for feature, label in all_features.items():
+            if feature in features:
+                info.append(f'{ctx.tick(True)}: {label}')
 
-        e.add_field(name='Info', value='\n'.join(map(str, info)))
+        if info:
+            e.add_field(name='Features', value='\n'.join(info))
 
-        fmt = f'Text {text_channels} ({secret_channels} secret)\nVoice {voice_channels} ({secret_voice} locked)'
-        e.add_field(name='Channels', value=fmt)
+        e.add_field(name='Channels', value='\n'.join(channel_info))
+
+        if guild.premium_tier != 0:
+            boosts = f'Level {guild.premium_tier}\n{guild.premium_subscription_count} boosts'
+            last_boost = max(guild.members, key=lambda m: m.premium_since or guild.created_at)
+            if last_boost.premium_since is not None:
+                boosts = f'{boosts}\nLast Boost: {last_boost} ({time.human_timedelta(last_boost.premium_since, accuracy=2)})'
+            e.add_field(name='Boosts', value=boosts, inline=False)
 
         fmt = f'<:online:316856575413321728> {member_by_status["online"]} ' \
               f'<:idle:316856575098880002> {member_by_status["idle"]} ' \
@@ -418,7 +485,11 @@ class Meta(commands.Cog):
               f'<:offline:316856575501402112> {member_by_status["offline"]}\n' \
               f'Total: {guild.member_count}'
 
-        e.add_field(name='Members', value=fmt)
+        e.add_field(name='Members', value=fmt, inline=False)
+
+        # TODO: maybe chunk and stuff for top role members
+        # requires max-concurrency d.py check to work though.
+
         e.add_field(name='Roles', value=', '.join(roles) if len(roles) < 10 else f'{len(roles)} roles')
         e.set_footer(text='Created').timestamp = guild.created_at
         await ctx.send(embed=e)

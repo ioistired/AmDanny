@@ -155,7 +155,12 @@ class Context(commands.Context):
             return confirm
 
     def tick(self, opt, label=None):
-        emoji = '✅' if opt else '<:error:487322218989092889>'
+        lookup = {
+            True: '<:greenTick:595405457993105408>',
+            False: '<:redTick:595405516675481637>',
+            None: '<:greyTick:595405552960667659>',
+        }
+        emoji = lookup.get(opt, lookup[False])
         if label is not None:
             return f'{emoji}: {label}'
         return emoji

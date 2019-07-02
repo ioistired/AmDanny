@@ -43,6 +43,20 @@ class SphinxObjectFileReader:
                 buf = buf[pos + 1:]
                 pos = buf.find(b'\n')
 
+class BotUser(commands.Converter):
+    async def convert(self, ctx, argument):
+        if not argument.isdigit():
+            raise commands.BadArgument('Not a valid bot user ID.')
+        try:
+            user = await ctx.bot.fetch_user(argument)
+        except discord.NotFound:
+            raise commands.BadArgument('Bot user not found (404).')
+        except discord.HTTPException as e:
+            raise commands.BadArgument(f'Error fetching bot user: {e}')
+        else:
+            if not user.bot:
+                raise commands.BadArgument('This is not a bot.')
+            return user
 
 class API(commands.Cog):
     """Discord API exclusive things."""
@@ -138,7 +152,9 @@ class API(commands.Cog):
     async def do_rtfm(self, ctx, key, obj):
         page_types = {
             'latest': 'https://discordpy.readthedocs.io/en/latest',
-            'python': 'https://docs.python.org/3'
+            'latest-jp': 'https://discordpy.readthedocs.io/ja/latest',
+            'python': 'https://docs.python.org/3',
+            'python-jp': 'https://docs.python.org/ja/3',
         }
 
         if obj is None:
@@ -151,16 +167,7 @@ class API(commands.Cog):
 
         obj = re.sub(r'^(?:discord\.(?:ext\.)?)?(?:commands\.)?(.+)', r'\1', obj)
 
-        if key == 'latest':
-            pit_of_success_helpers = {
-                'vc': 'VoiceClient',
-                'msg': 'Message',
-                'color': 'Colour',
-                'perm': 'Permissions',
-                'channel': 'TextChannel',
-                'chan': 'TextChannel',
-            }
-
+        if key.startswith('latest'):
             # point the abc.Messageable types properly:
             q = obj.lower()
             for name in dir(discord.abc.Messageable):
@@ -169,12 +176,6 @@ class API(commands.Cog):
                 if q == name:
                     obj = f'abc.Messageable.{name}'
                     break
-
-            def replace(o):
-                return pit_of_success_helpers.get(o.group(1), '')
-
-            pattern = re.compile('|'.join(fr'(?:^({k})$|({k})\.)' for k in pit_of_success_helpers.keys()))
-            obj = pattern.sub(replace, obj)
 
         cache = list(self._rtfm_cache[key].items())
         def transform(tup):
@@ -186,7 +187,7 @@ class API(commands.Cog):
         if len(matches) == 0:
             return await ctx.send('Could not find anything. Sorry.')
 
-        e.description = '\n'.join(f'[{key}]({url})' for key, url in matches)
+        e.description = '\n'.join(f'[`{key}`]({url})' for key, url in matches)
         await ctx.send(embed=e)
 
     @commands.group(aliases=['rtfd'], invoke_without_command=True)
@@ -196,12 +197,24 @@ class API(commands.Cog):
         Events, objects, and functions are all supported through a
         a cruddy fuzzy algorithm.
         """
-        await self.do_rtfm(ctx, 'latest', obj)
+        key = self.transform_rtfm_language_key(ctx, 'latest')
+        await self.do_rtfm(ctx, key, obj)
+
+    @rtfm.command(name='jp')
+    async def rtfm_jp(self, ctx, *, obj: str = None):
+        """Gives you a documentation link for a discord.py entity (Japanese)."""
+        await self.do_rtfm(ctx, 'latest-jp', obj)
 
     @rtfm.command(name='python', aliases=['py'])
     async def rtfm_python(self, ctx, *, obj: str = None):
         """Gives you a documentation link for a Python entity."""
-        await self.do_rtfm(ctx, 'python', obj)
+        key = self.transform_rtfm_language_key(ctx, 'python')
+        await self.do_rtfm(ctx, key, obj)
+
+    @rtfm.command(name='py-jp', aliases=['py-ja'])
+    async def rtfm_python_jp(self, ctx, *, obj: str = None):
+        """Gives you a documentation link for a Python entity (Japanese)."""
+        await self.do_rtfm(ctx, 'python-jp', obj)
 
     async def refresh_faq_cache(self):
         self.faq_entries = {}
