@@ -1,5 +1,5 @@
 from discord.ext import commands
-from .utils import fuzzy
+from .utils import fuzzy, time
 import asyncio
 import discord
 import re
@@ -264,21 +264,7 @@ class API(commands.Cog):
         return name.replace('-', '.')
 
     @commands.command()
-    @can_use_block()
-    async def block(self, ctx, *, member: discord.Member):
-        """Blocks a user from your channel."""
-
-        reason = f'Block by {ctx.author} (ID: {ctx.author.id})'
-
-        try:
-            await ctx.channel.set_permissions(member, send_messages=False, reason=reason)
-        except:
-            await ctx.send('\N{THUMBS DOWN SIGN}')
-        else:
-            await ctx.send('\N{THUMBS UP SIGN}')
-
-    @commands.command()
-    @can_use_block()
+    @commands.has_permissions(manage_channel=True)
     async def tempblock(self, ctx, duration: time.FutureTime, *, member: discord.Member):
         """Temporarily blocks a user from your channel.
 
