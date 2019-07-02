@@ -521,7 +521,7 @@ class Mod(commands.Cog):
     async def raid_on(self, ctx, *, channel: discord.TextChannel = None):
         """Enables basic raid mode on the server.
 
-        When enabled, server verification level is set to table flip
+        When enabled, server verification level is set to medium
         levels and allows the bot to broadcast new members joining
         to a specified channel.
 
@@ -532,7 +532,7 @@ class Mod(commands.Cog):
         channel = channel or ctx.channel
 
         try:
-            await ctx.guild.edit(verification_level=discord.VerificationLevel.high)
+            await ctx.guild.edit(verification_level=discord.VerificationLevel.medium)
         except discord.HTTPException:
             await ctx.send('\N{WARNING SIGN} Could not set verification level.')
 
@@ -597,7 +597,7 @@ class Mod(commands.Cog):
             return await ctx.send('\N{NO ENTRY SIGN} I do not have permissions to kick and ban members.')
 
         try:
-            await ctx.guild.edit(verification_level=discord.VerificationLevel.high)
+            await ctx.guild.edit(verification_level=discord.VerificationLevel.medium)
         except discord.HTTPException:
             await ctx.send('\N{WARNING SIGN} Could not set verification level.')
 
