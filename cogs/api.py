@@ -264,7 +264,8 @@ class API(commands.Cog):
         return name.replace('-', '.')
 
     @commands.command()
-    @commands.has_permissions(manage_channel=True)
+    @commands.has_permissions(manage_roles=True)
+    @commands.bot_has_permissions(manage_roles=True)
     async def tempblock(self, ctx, duration: time.FutureTime, *, member: discord.Member):
         """Temporarily blocks a user from your channel.
 
@@ -286,12 +287,8 @@ class API(commands.Cog):
 
         reason = f'Tempblock by {ctx.author} (ID: {ctx.author.id}) until {duration.dt}'
 
-        try:
-            await ctx.channel.set_permissions(member, send_messages=False, reason=reason)
-        except:
-            await ctx.send('\N{THUMBS DOWN SIGN}')
-        else:
-            await ctx.send(f'Blocked {member} for {time.human_timedelta(duration.dt, source=timer.created_at)}.')
+        await ctx.channel.set_permissions(member, send_messages=False, reason=reason)
+        await ctx.send(f'Blocked {member} for {time.human_timedelta(duration.dt, source=timer.created_at)}.')
 
     @commands.Cog.listener()
     async def on_tempblock_timer_complete(self, timer):
