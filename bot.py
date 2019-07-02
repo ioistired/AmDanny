@@ -81,6 +81,7 @@ class RoboDanny(commands.AutoShardedBot):
             except Exception as e:
                 print(f'Failed to load extension {extension}.', file=sys.stderr)
                 traceback.print_exc()
+                print()  # ensure a blank line between multiple of these errors
 
     async def on_socket_response(self, msg):
         self._prev_events.append(msg)
