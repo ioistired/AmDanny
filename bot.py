@@ -25,6 +25,7 @@ initial_extensions = (
     'cogs.stars',
     'cogs.reminder',
     'cogs.api',
+    'cogs.mod',
     'cogs.buttons',
     'cogs.admin',
     'cogs.rng',
