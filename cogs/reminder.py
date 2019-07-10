@@ -5,6 +5,7 @@ import asyncio
 import asyncpg
 import datetime
 import io
+import textwrap
 
 class Reminders(db.Table):
     id = db.PrimaryKeyColumn()
@@ -252,7 +253,7 @@ class Reminder(commands.Cog):
 
         for _id, expires, created, message in records:
             out.write(f'**{_id}: In {time.human_timedelta(expires, source=created)}**\n')
-            out.write(message + '\n')
+            out.write(textwrap.shorten(message, 512) + '\n')
 
         await ctx.send(out.getvalue())
 
