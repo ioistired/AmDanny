@@ -209,60 +209,6 @@ class API(commands.Cog):
         """Gives you a documentation link for a Python entity."""
         await self.do_rtfm(ctx, 'python', obj)
 
-    async def _member_stats(self, ctx, member, total_uses):
-        e = discord.Embed(title='RTFM Stats')
-        e.set_author(name=str(member), icon_url=member.avatar_url)
-
-        query = 'SELECT count FROM rtfm WHERE user_id=$1;'
-        record = await ctx.db.fetchrow(query, member.id)
-
-        if record is None:
-            count = 0
-        else:
-            count = record['count']
-
-        e.add_field(name='Uses', value=count)
-        e.add_field(name='Percentage', value=f'{count/total_uses:.2%} out of {total_uses}')
-        e.colour = discord.Colour.blurple()
-        await ctx.send(embed=e)
-
-    @rtfm.command()
-    async def stats(self, ctx, *, member: discord.Member = None):
-        """Tells you stats about the ?rtfm command."""
-        query = 'SELECT SUM(count) AS total_uses FROM rtfm;'
-        record = await ctx.db.fetchrow(query)
-        total_uses = record['total_uses']
-
-        if member is not None:
-            return await self._member_stats(ctx, member, total_uses)
-
-        query = 'SELECT user_id, count FROM rtfm ORDER BY count DESC LIMIT 10;'
-        records = await ctx.db.fetch(query)
-
-        output = []
-        output.append(f'**Total uses**: {total_uses}')
-
-        # first we get the most used users
-        if records:
-            output.append(f'**Top {len(records)} users**:')
-
-            for rank, (user_id, count) in enumerate(records, 1):
-                user = self.bot.get_user(user_id)
-                if rank != 10:
-                    output.append(f'{rank}\u20e3 {user}: {count}')
-                else:
-                    output.append(f'\N{KEYCAP TEN} {user}: {count}')
-
-        await ctx.send('\n'.join(output))
-
-    def library_name(self, channel):
-        # language_<name>
-        name = channel.name
-        index = name.find('_')
-        if index != -1:
-            name = name[index + 1:]
-        return name.replace('-', '.')
-
     @commands.command()
     @commands.has_permissions(manage_roles=True)
     @commands.bot_has_permissions(manage_roles=True)
@@ -325,7 +271,7 @@ class API(commands.Cog):
         reason = f'Automatic unblock from timer made on {timer.created_at} by {moderator}.'
 
         try:
-            await channel.set_permissions(to_unblock, send_messages=None, reason=reason)
+            await ctx.channel.set_permissions(to_unblock, send_messages=None, reason=reason)
         except:
             pass
 
