@@ -1,8 +1,8 @@
 asyncpg>=0.12.0
-ben_cogs
+ben_cogs[sql]
 click
 dpy-ui
-git+https://github.com/Rapptz/discord.py@master
+discord.py
 lru-dict
 lxml
 parsedatetime
