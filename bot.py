@@ -32,8 +32,9 @@ initial_extensions = (
     'cogs.stalking',
     'cogs.connect4',
     'jishaku',
-    'ben_cogs.misc',
-    'ben_cogs.debug',
+    'bot_bin.misc',
+    'bot_bin.debug',
+    'bot_bin.sql',
     'cogs.config',
 )
 
