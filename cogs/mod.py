@@ -121,15 +121,18 @@ class MemberID(commands.Converter):
 
 class BannedMember(commands.Converter):
     async def convert(self, ctx, argument):
-        ban_list = await ctx.guild.bans()
-        try:
+        if argument.isdigit():
             member_id = int(argument, base=10)
-            entity = discord.utils.find(lambda u: u.user.id == member_id, ban_list)
-        except ValueError:
-            entity = discord.utils.find(lambda u: str(u.user) == argument, ban_list)
+            try:
+                return await ctx.guild.fetch_ban(discord.Object(id=member_id))
+            except discord.NotFound:
+                raise commands.BadArgument('This member has not been banned before.') from None
+
+        ban_list = await ctx.guild.bans()
+        entity = discord.utils.find(lambda u: str(u.user) == argument, ban_list)
 
         if entity is None:
-            raise commands.BadArgument("Not a valid previously-banned member.")
+            raise commands.BadArgument('This member has not been banned before.')
         return entity
 
 class ActionReason(commands.Converter):
@@ -137,8 +140,8 @@ class ActionReason(commands.Converter):
         ret = f'{ctx.author} (ID: {ctx.author.id}): {argument}'
 
         if len(ret) > 512:
-            reason_max = 512 - len(ret) - len(argument)
-            raise commands.BadArgument(f'reason is too long ({len(argument)}/{reason_max})')
+            reason_max = 512 - len(ret) + len(argument)
+            raise commands.BadArgument(f'Reason is too long ({len(argument)}/{reason_max})')
         return ret
 
 def safe_reason_append(base, to_append):
@@ -159,19 +162,23 @@ class SpamChecker:
 
     1) It checks if a user has spammed more than 10 times in 12 seconds
     2) It checks if the content has been spammed 15 times in 17 seconds.
+    3) It checks if new users have spammed 30 times in 35 seconds.
+    4) It checks if "fast joiners" have spammed 10 times in 12 seconds.
 
     The second case is meant to catch alternating spam bots while the first one
     just catches regular singular spam bots.
 
     From experience these values aren't reached unless someone is actively spamming.
-
-    The third case is used for logging purposes only.
     """
     def __init__(self):
         self.by_content = CooldownByContent.from_cooldown(15, 17.0, commands.BucketType.member)
         self.by_user = commands.CooldownMapping.from_cooldown(10, 12.0, commands.BucketType.user)
         self.last_join = None
         self.new_user = commands.CooldownMapping.from_cooldown(30, 35.0, commands.BucketType.channel)
+
+        # user_id flag mapping (for about 30 minutes)
+        self.fast_joiners = cache.ExpiringCache(seconds=1800.0)
+        self.hit_and_run = commands.CooldownMapping.from_cooldown(10, 12, commands.BucketType.channel)
 
     def is_new(self, member):
         now = datetime.datetime.utcnow()
@@ -185,12 +192,15 @@ class SpamChecker:
 
         current = message.created_at.replace(tzinfo=datetime.timezone.utc).timestamp()
 
+        if message.author.id in self.fast_joiners:
+            bucket = self.hit_and_run.get_bucket(message)
+            if bucket.update_rate_limit(current):
+                return True
+
         if self.is_new(message.author):
-            # This is a trial-run, it has not banned anyone yet.
             new_bucket = self.new_user.get_bucket(message)
             if new_bucket.update_rate_limit(current):
-                log.info(f'[Raid Mode] User {message.author} (ID: {message.author.id}) in '
-                         f'{message.guild.name} (ID: {message.guild.id}) would have been banned as a new user.')
+                return True
 
         user_bucket = self.by_user.get_bucket(message)
         if user_bucket.update_rate_limit(current):
@@ -209,6 +219,8 @@ class SpamChecker:
             return False
         is_fast = (joined - self.last_join).total_seconds() <= 2.0
         self.last_join = joined
+        if is_fast:
+            self.fast_joiners[member.id] = True
         return is_fast
 
 ## Checks
@@ -254,11 +266,18 @@ class Mod(commands.Cog):
         self.batch_updates.add_exception_type(asyncpg.PostgresConnectionError)
         self.batch_updates.start()
 
+        # (guild_id, channel_id): List[str]
+        # A batch list of message content for message
+        self.message_batches = defaultdict(list)
+        self._batch_message_lock = asyncio.Lock(loop=bot.loop)
+        self.bulk_send_messages.start()
+
     def __repr__(self):
         return '<cogs.Mod>'
 
     def cog_unload(self):
         self.batch_updates.stop()
+        self.bulk_send_messages.stop()
 
     async def cog_command_error(self, ctx, error):
         if isinstance(error, commands.BadArgument):
@@ -308,6 +327,27 @@ class Mod(commands.Cog):
     async def batch_updates(self):
         async with self._batch_lock:
             await self.bulk_insert()
+
+    @tasks.loop(seconds=10.0)
+    async def bulk_send_messages(self):
+        async with self._batch_message_lock:
+            for ((guild_id, channel_id), messages) in self.message_batches.items():
+                guild = self.bot.get_guild(guild_id)
+                channel = guild and guild.get_channel(channel_id)
+                if channel is None:
+                    continue
+
+                paginator = commands.Paginator(suffix='', prefix='')
+                for message in messages:
+                    paginator.add_line(message)
+
+                for page in paginator.pages:
+                    try:
+                        await channel.send(page)
+                    except discord.HTTPException:
+                        pass
+
+            self.message_batches.clear()
 
     @cache.cache()
     async def get_guild_config(self, guild_id):
@@ -380,7 +420,10 @@ class Mod(commands.Cog):
         except Exception as e:
             log.info(f'Failed to autoban member {author} (ID: {author.id}) in guild ID {guild_id}')
         else:
-            await message.channel.send(f'Banned {author} (ID: {author.id}) for spamming {mention_count} mentions.')
+            to_send = f'Banned {author} (ID: {author.id}) for spamming {mention_count} mentions.'
+            async with self._batch_message_lock:
+                self.message_batches[(guild_id, message.channel.id)].append(to_send)
+
             log.info(f'Member {author} (ID: {author.id}) has been autobanned from guild ID {guild_id}')
 
     @commands.Cog.listener()
@@ -512,7 +555,8 @@ class Mod(commands.Cog):
             fmt = 'Raid Mode: off\nBroadcast Channel: None'
         else:
             ch = f'<#{row[1]}>' if row[1] else None
-            fmt = f'Raid Mode: {RaidMode(row[0])}\nBroadcast Channel: {ch}'
+            mode = RaidMode(row[0]) if row[0] is not None else RaidMode.off
+            fmt = f'Raid Mode: {mode}\nBroadcast Channel: {ch}'
 
         await ctx.send(fmt)
 
@@ -837,7 +881,7 @@ class Mod(commands.Cog):
 
         # member filters
         predicates = [
-            lambda m: can_execute_action(ctx, author, m), # Only if applicable
+            lambda m: isinstance(m, discord.Member) and can_execute_action(ctx, author, m), # Only if applicable
             lambda m: not m.bot, # No bots
             lambda m: m.discriminator != '0000', # No deleted users
         ]
@@ -871,6 +915,9 @@ class Mod(commands.Cog):
             predicates.append(created)
         if args.joined:
             def joined(member, *, offset=now - datetime.timedelta(minutes=args.joined)):
+                if isinstance(member, discord.User):
+                    # If the member is a user then they left already
+                    return True
                 return member.joined_at and member.joined_at > offset
             predicates.append(joined)
         if args.joined_after:
@@ -998,6 +1045,7 @@ class Mod(commands.Cog):
     @commands.Cog.listener()
     async def on_tempban_timer_complete(self, timer):
         guild_id, mod_id, member_id = timer.args
+        await self.bot.wait_until_ready()
 
         guild = self.bot.get_guild(guild_id)
         if guild is None:
@@ -1204,7 +1252,7 @@ class Mod(commands.Cog):
         else:
             await self.do_removal(ctx, 100, lambda e: substr in e.content)
 
-    @remove.command(name='bot')
+    @remove.command(name='bot', aliases=['bots'])
     async def _bot(self, ctx, prefix=None, search=100):
         """Removes a bot user's messages and messages with their optional prefix."""
 
@@ -1280,7 +1328,7 @@ class Mod(commands.Cog):
         parser.add_argument('--embeds', action='store_const', const=lambda m: len(m.embeds))
         parser.add_argument('--files', action='store_const', const=lambda m: len(m.attachments))
         parser.add_argument('--reactions', action='store_const', const=lambda m: len(m.reactions))
-        parser.add_argument('--search', type=int, default=100)
+        parser.add_argument('--search', type=int)
         parser.add_argument('--after', type=int)
         parser.add_argument('--before', type=int)
 
@@ -1335,6 +1383,13 @@ class Mod(commands.Cog):
             if args._not:
                 return not r
             return r
+
+        if args.after:
+            if args.search is None:
+                args.search = 2000
+
+        if args.search is None:
+            args.search = 100
 
         args.search = max(0, min(2000, args.search)) # clamp from 0-2000
         await self.do_removal(ctx, args.search, predicate, before=args.before, after=args.after)
@@ -1490,6 +1545,7 @@ class Mod(commands.Cog):
     @commands.Cog.listener()
     async def on_tempmute_timer_complete(self, timer):
         guild_id, mod_id, member_id, role_id = timer.args
+        await self.bot.wait_until_ready()
 
         guild = self.bot.get_guild(guild_id)
         if guild is None:
@@ -1504,19 +1560,23 @@ class Mod(commands.Cog):
                 self._data_batch[guild_id].append((member_id, False))
             return
 
-        moderator = guild.get_member(mod_id)
-        if moderator is None:
-            try:
-                moderator = await self.bot.fetch_user(mod_id)
-            except:
-                # request failed somehow
-                moderator = f'Mod ID {mod_id}'
+        if mod_id != member_id:
+            moderator = guild.get_member(mod_id)
+            if moderator is None:
+                try:
+                    moderator = await self.bot.fetch_user(mod_id)
+                except:
+                    # request failed somehow
+                    moderator = f'Mod ID {mod_id}'
+                else:
+                    moderator = f'{moderator} (ID: {mod_id})'
             else:
                 moderator = f'{moderator} (ID: {mod_id})'
-        else:
-            moderator = f'{moderator} (ID: {mod_id})'
 
-        reason = f'Automatic unmute from timer made on {timer.created_at} by {moderator}.'
+            reason = f'Automatic unmute from timer made on {timer.created_at} by {moderator}.'
+        else:
+            reason = f'Expiring self-mute made on {timer.created_at} by {member}'
+
         try:
             await member.remove_roles(discord.Object(id=role_id), reason=reason)
         except discord.HTTPException:
@@ -1558,7 +1618,7 @@ class Mod(commands.Cog):
         if role.is_default():
             return await ctx.send('Cannot use the @\u200beveryone role.')
 
-        if role > ctx.author.top_role:
+        if role > ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
             return await ctx.send('This role is higher than your highest role.')
 
         if role > ctx.me.top_role:
@@ -1711,6 +1771,58 @@ class Mod(commands.Cog):
         await self.bot.pool.execute(query, guild_id)
         self.get_guild_config.invalidate(self, guild_id)
         await ctx.send('Successfully unbound mute role.')
+
+    @commands.command()
+    @commands.guild_only()
+    async def selfmute(self, ctx, *, duration: time.ShortTime):
+        """Temporarily mutes yourself for the specified duration.
+
+        The duration must be in a short time form, e.g. 4h. Can
+        only mute yourself for a maximum of 24 hours and a minimum
+        of 5 minutes.
+
+        Do not ask a moderator to unmute you.
+        """
+
+        reminder = self.bot.get_cog('Reminder')
+        if reminder is None:
+            return await ctx.send('Sorry, this functionality is currently unavailable. Try again later?')
+
+        config = await self.get_guild_config(ctx.guild.id)
+        role_id = config and config.mute_role_id
+        if role_id is None:
+            raise NoMuteRole()
+
+        if ctx.author._roles.has(role_id):
+            return await ctx.send('Somehow you are already muted <:rooThink:596576798351949847>')
+
+        created_at = ctx.message.created_at
+        if duration.dt > (created_at + datetime.timedelta(days=1)):
+            return await ctx.send('Duration is too long. Must be at most 24 hours.')
+
+        if duration.dt < (created_at + datetime.timedelta(minutes=5)):
+            return await ctx.send('Duration is too short. Must be at least 5 minutes.')
+
+        delta = time.human_timedelta(duration.dt, source=created_at)
+        warning = f'Are you sure you want to be muted for {delta}?\n**Do not ask the moderators to undo this!**'
+        confirm = await ctx.prompt(warning, reacquire=False)
+        if not confirm:
+            return await ctx.send('Aborting', delete_after=5.0)
+
+        reason = f'Self-mute for {ctx.author} (ID: {ctx.author.id}) for {delta}'
+        await ctx.author.add_roles(discord.Object(id=role_id), reason=reason)
+        timer = await reminder.create_timer(duration.dt, 'tempmute', ctx.guild.id,
+                                                                     ctx.author.id,
+                                                                     ctx.author.id,
+                                                                     role_id,
+                                                                     created=created_at)
+
+        await ctx.send(f'\N{OK HAND SIGN} Muted for {delta}. Be sure not to bother anyone about it.')
+
+    @selfmute.error
+    async def on_selfmute_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send('Missing a duration to selfmute for.')
 
 def setup(bot):
     bot.add_cog(Mod(bot))

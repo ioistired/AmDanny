@@ -9,7 +9,7 @@ import logging
 import traceback
 import aiohttp
 import sys
-from collections import Counter, deque
+from collections import Counter, deque, defaultdict
 
 import config
 import asyncpg
@@ -36,6 +36,7 @@ initial_extensions = (
     'bot_bin.debug',
     'bot_bin.sql',
     'cogs.config',
+    'cogs.funhouse',
 )
 
 def _prefix_callable(bot, msg):
@@ -49,16 +50,23 @@ def _prefix_callable(bot, msg):
     return base
 
 class RoboDanny(commands.AutoShardedBot):
-    def __init__(self):
+    def __init__(self, *, pool):
         super().__init__(command_prefix=_prefix_callable, description=description,
-                         pm_help=None, help_attrs=dict(hidden=True), fetch_offline_members=False, *, pool)
+                         pm_help=None, help_attrs=dict(hidden=True),
+                         fetch_offline_members=False, heartbeat_timeout=150.0)
 
         self.client_id = config.client_id
         self.carbon_key = config.carbon_key
         self.bots_key = config.bots_key
         self.session = aiohttp.ClientSession(loop=self.loop)
+        self.pool = pool
 
         self._prev_events = deque(maxlen=10)
+
+        # shard_id: List[datetime.datetime]
+        # shows the last attempted IDENTIFYs and RESUMEs
+        self.resumes = defaultdict(list)
+        self.identifies = defaultdict(list)
 
         # guild_id: list
         self.prefixes = Config('prefixes.json')
@@ -84,8 +92,25 @@ class RoboDanny(commands.AutoShardedBot):
                 traceback.print_exc()
                 print()  # ensure a blank line between multiple of these errors
 
+    def _clear_gateway_data(self):
+        one_week_ago = datetime.datetime.utcnow() - datetime.timedelta(days=7)
+        for shard_id, dates in self.identifies.items():
+            to_remove = [index for index, dt in enumerate(dates) if dt < one_week_ago]
+            for index in reversed(to_remove):
+                del dates[index]
+
+        for shard_id, dates in self.resumes.items():
+            to_remove = [index for index, dt in enumerate(dates) if dt < one_week_ago]
+            for index in reversed(to_remove):
+                del dates[index]
+
     async def on_socket_response(self, msg):
         self._prev_events.append(msg)
+
+    async def before_identify_hook(self, shard_id, *, initial):
+        self._clear_gateway_data()
+        self.identifies[shard_id].append(datetime.datetime.utcnow())
+        await super().before_identify_hook(shard_id, initial=initial)
 
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.NoPrivateMessage):
@@ -102,7 +127,7 @@ class RoboDanny(commands.AutoShardedBot):
             await ctx.send(error)
 
     def get_guild_prefixes(self, guild, *, local_inject=_prefix_callable):
-        proxy_msg = discord.Object(id=None)
+        proxy_msg = discord.Object(id=0)
         proxy_msg.guild = guild
         return local_inject(self, proxy_msg)
 
@@ -132,8 +157,9 @@ class RoboDanny(commands.AutoShardedBot):
 
         print(f'Ready: {self.user} (ID: {self.user.id})')
 
-    async def on_resumed(self):
-        print('resumed...')
+    async def on_shard_resumed(self, shard_id):
+        print(f'Shard ID {shard_id} has resumed...')
+        self.resumes[shard_id].append(datetime.datetime.utcnow())
 
     def get_context(self, message, cls=context.Context):
         return super().get_context(message, cls=cls)
@@ -156,7 +182,7 @@ class RoboDanny(commands.AutoShardedBot):
         author_id = message.author.id
         if retry_after and author_id != self.owner_id:
             self._auto_spam_count[author_id] += 1
-            if self._auto_spam_count[author_id] >= 2:
+            if self._auto_spam_count[author_id] >= 5:
                 await self.add_to_blacklist(author_id)
                 del self._auto_spam_count[author_id]
                 await self.log_spammer(ctx, message, retry_after, autoblock=True)

@@ -92,7 +92,7 @@ class HelpPaginator(Pages):
         entries = (
             ('<argument>', 'This means the argument is __**required**__.'),
             ('[argument]', 'This means the argument is __**optional**__.'),
-            ('[A|B]', 'This means the it can be __**either A or B**__.'),
+            ('[A|B]', 'This means that it can be __**either A or B**__.'),
             ('[argument...]', 'This means you can have multiple arguments.\n' \
                               'Now that you know the basics, it should be noted that...\n' \
                               '__**You do not type in the brackets!**__')
@@ -400,12 +400,18 @@ class Meta(commands.Cog):
 
         await ctx.send(embed=e)
 
-    @commands.command(aliases=['guildinfo'])
+    @commands.command(aliases=['guildinfo'], usage='')
     @commands.guild_only()
-    async def serverinfo(self, ctx):
+    async def serverinfo(self, ctx, *, guild_id: int = None):
         """Shows info about the current server."""
 
-        guild = ctx.guild
+        if guild_id is not None and await self.bot.is_owner(ctx.author):
+            guild = self.bot.get_guild(guild_id)
+            if guild is None:
+                return await ctx.send(f'Invalid Guild ID given.')
+        else:
+            guild = ctx.guild
+
         roles = [role.name.replace('@', '@\u200b') for role in guild.roles]
 
         # we're going to duck type our way here
@@ -432,13 +438,9 @@ class Meta(commands.Cog):
 
         e = discord.Embed()
         e.title = guild.name
-        e.add_field(name='ID', value=guild.id)
-        e.add_field(name='Owner', value=guild.owner)
+        e.description = f'**ID**: {guild.id}\n**Owner**: {guild.owner}'
         if guild.icon:
             e.set_thumbnail(url=guild.icon_url)
-
-        if guild.splash:
-            e.set_image(url=guild.splash_url)
 
         channel_info = []
         key_to_emoji = {
@@ -463,10 +465,11 @@ class Meta(commands.Cog):
             'PARTNERED': 'Partnered',
             'VERIFIED': 'Verified',
             'DISCOVERABLE': 'Server Discovery',
+            'COMMUNITY': 'Community Server',
+            'WELCOME_SCREEN_ENABLED': 'Welcome Screen',
             'INVITE_SPLASH': 'Invite Splash',
             'VIP_REGIONS': 'VIP Voice Servers',
             'VANITY_URL': 'Vanity Invite',
-            'MORE_EMOJI': 'More Emoji',
             'COMMERCE': 'Commerce',
             'LURKABLE': 'Lurkable',
             'NEWS': 'News Channels',
@@ -490,24 +493,41 @@ class Meta(commands.Cog):
                 boosts = f'{boosts}\nLast Boost: {last_boost} ({time.human_timedelta(last_boost.premium_since, accuracy=2)})'
             e.add_field(name='Boosts', value=boosts, inline=False)
 
+        bots = sum(m.bot for m in guild.members)
         fmt = f'<:online:316856575413321728> {member_by_status["online"]} ' \
               f'<:idle:316856575098880002> {member_by_status["idle"]} ' \
               f'<:dnd:316856574868193281> {member_by_status["dnd"]} ' \
               f'<:offline:316856575501402112> {member_by_status["offline"]}\n' \
-              f'Total: {guild.member_count}'
+              f'Total: {guild.member_count} ({formats.plural(bots):bot})'
 
         e.add_field(name='Members', value=fmt, inline=False)
-
-        # TODO: maybe chunk and stuff for top role members
-        # requires max-concurrency d.py check to work though.
-
         e.add_field(name='Roles', value=', '.join(roles) if len(roles) < 10 else f'{len(roles)} roles')
+
+        emoji_stats = Counter()
+        for emoji in guild.emojis:
+            if emoji.animated:
+                emoji_stats['animated'] += 1
+                emoji_stats['animated_disabled'] += not emoji.available
+            else:
+                emoji_stats['regular'] += 1
+                emoji_stats['disabled'] += not emoji.available
+
+        fmt = f'Regular: {emoji_stats["regular"]}/{guild.emoji_limit}\n' \
+              f'Animated: {emoji_stats["animated"]}/{guild.emoji_limit}\n' \
+
+        if emoji_stats['disabled'] or emoji_stats['animated_disabled']:
+            fmt = f'{fmt}Disabled: {emoji_stats["disabled"]} regular, {emoji_stats["animated_disabled"]} animated\n'
+
+        fmt = f'{fmt}Total Emoji: {len(guild.emojis)}/{guild.emoji_limit*2}'
+        e.add_field(name='Emoji', value=fmt, inline=False)
         e.set_footer(text='Created').timestamp = guild.created_at
         await ctx.send(embed=e)
 
     async def say_permissions(self, ctx, member, channel):
         permissions = channel.permissions_for(member)
         e = discord.Embed(colour=member.colour)
+        avatar = member.avatar_url_as(static_format='png')
+        e.set_author(name=str(member), url=avatar)
         allowed, denied = [], []
         for name, value in permissions:
             name = name.replace('_', ' ').replace('guild', 'server').title()
@@ -552,6 +572,29 @@ class Meta(commands.Cog):
         """
         channel = channel or ctx.channel
         member = ctx.guild.me
+        await self.say_permissions(ctx, member, channel)
+
+    @commands.command()
+    @commands.is_owner()
+    async def debugpermissions(self, ctx, guild_id: int, channel_id: int, author_id: int = None):
+        """Shows permission resolution for a channel and an optional author."""
+
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            return await ctx.send('Guild not found?')
+
+        channel = guild.get_channel(channel_id)
+        if channel is None:
+            return await ctx.send('Channel not found?')
+
+        if author_id is None:
+            member = guild.me
+        else:
+            member = guild.get_member(author_id)
+
+        if member is None:
+            return await ctx.send('Member not found?')
+
         await self.say_permissions(ctx, member, channel)
 
     @commands.command(aliases=['invite'])

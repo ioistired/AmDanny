@@ -56,7 +56,7 @@ class UrbanDictionaryPages(Pages):
             e.timestamp = date
 
 class RedditMediaURL:
-    VALID_PATH = re.compile(r'/r/[A-Za-z0-9]+/comments/[A-Za-z0-9]+(?:/.+)?')
+    VALID_PATH = re.compile(r'/r/[A-Za-z0-9_]+/comments/[A-Za-z0-9]+(?:/.+)?')
 
     def __init__(self, url):
         self.url = url
@@ -237,7 +237,7 @@ class Buttons(commands.Cog):
     async def _urban(self, ctx, *, word):
         """Searches urban dictionary."""
 
-        url = 'https://api.urbandictionary.com/v0/define'
+        url = 'http://api.urbandictionary.com/v0/define'
         async with ctx.session.get(url, params={'term': word}) as resp:
             if resp.status != 200:
                 return await ctx.send(f'An error occurred: {resp.status} {resp.reason}')

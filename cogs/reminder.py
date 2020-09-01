@@ -70,6 +70,8 @@ class Reminder(commands.Cog):
     async def cog_command_error(self, ctx, error):
         if isinstance(error, commands.BadArgument):
             await ctx.send(error)
+        if isinstance(error, commands.TooManyArguments):
+            await ctx.send(f'You called the {ctx.command.name} command with too many arguments.')
 
     async def get_active_timer(self, *, connection=None, days=7):
         query = "SELECT * FROM reminders WHERE expires < (CURRENT_DATE + $1::interval) ORDER BY expires LIMIT 1;"
@@ -229,7 +231,7 @@ class Reminder(commands.Cog):
         delta = time.human_timedelta(when.dt, source=timer.created_at)
         await ctx.send(f'Alright {self.message_mention(ctx.message)}, in {delta}: {when.arg}')
 
-    @reminder.command(name='list')
+    @reminder.command(name='list', ignore_extra=False)
     async def reminder_list(self, ctx):
         """Shows the 10 latest currently running reminders."""
         query = """SELECT id, expires, created, extra #>> '{args,3}'
@@ -257,7 +259,7 @@ class Reminder(commands.Cog):
 
         await ctx.send(out.getvalue())
 
-    @reminder.command(name='delete', aliases=['remove', 'cancel'])
+    @reminder.command(name='delete', aliases=['remove', 'cancel'], ignore_extra=False)
     async def reminder_delete(self, ctx, *, id: int):
         """Deletes a reminder by its ID.
 
@@ -285,19 +287,40 @@ class Reminder(commands.Cog):
 
         await ctx.send('Successfully deleted reminder.')
 
+    @reminder.command(name='clear', ignore_extra=False)
+    async def reminder_clear(self, ctx):
+        """Clears all reminders you have set."""
+
+        # For UX purposes this has to be two queries.
+
+        query = """SELECT COUNT(*)
+                   FROM reminders
+                   WHERE event = 'reminder'
+                   AND extra #>> '{args,0}' = $1;
+                """
+
+        author_id = str(ctx.author.id)
+        total = await ctx.db.fetchrow(query, author_id)
+        total = total[0]
+        if total == 0:
+            return await ctx.send('You do not have any reminders to delete.')
+
+        confirm = await ctx.prompt(f'Are you sure you want to delete {formats.plural(total):reminder}?')
+        if not confirm:
+            return await ctx.send('Aborting')
+
+        query = """DELETE FROM reminders WHERE event = 'reminder' AND extra #>> '{args,0}' = $1;"""
+        await ctx.db.execute(query, author_id)
+        await ctx.send(f'Successfully deleted {formats.plural(total):reminder}.')
+
     @commands.Cog.listener()
     async def on_reminder_timer_complete(self, timer):
         author_name, author_id, channel_id, message = timer.args
 
-        await self.bot.wait_until_ready()
-        channel = self.bot.get_channel(channel_id)
-        if channel is None:
-            # Check if it's a DM channel
-            author = self.bot.get_user(author_id) or (await self.bot.fetch_user(author_id))
-            try:
-                channel = await author.dm_channel()
-            except:
-                return
+        try:
+            channel = self.bot.get_channel(channel_id) or (await self.bot.fetch_channel(channel_id))
+        except discord.HTTPException:
+            return
 
         guild_id = channel.guild.id if isinstance(channel, discord.TextChannel) else '@me'
         message_id = timer.kwargs.get('message_id')
