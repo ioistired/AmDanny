@@ -10,6 +10,7 @@ from lru import LRU
 import yarl
 import io
 import re
+import unicodedata
 
 log = logging.getLogger(__name__)
 
