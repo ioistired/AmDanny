@@ -3,6 +3,7 @@ bot_bin[sql]>=1.0.0,<2.0.0
 click
 dpy-ui
 discord.py
+jishaku
 lru-dict
 lxml
 parsedatetime
