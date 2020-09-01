@@ -11,6 +11,14 @@ import lxml.etree as etree
 DISCORD_PY_GUILD_ID = 336642139381301249
 ROBODANNY_ID = 80528701850124288
 
+def can_use_block():
+    def predicate(ctx):
+        if ctx.guild is None:
+            return False
+
+        return ctx.channel.permissions_for(ctx.author).manage_roles
+    return commands.check(predicate)
+
 class SphinxObjectFileReader:
     # Inspired by Sphinx's InventoryFileReader
     BUFSIZE = 16 * 1024
@@ -298,11 +306,6 @@ class API(commands.Cog):
             await channel.set_permissions(to_unblock, send_messages=None, reason=reason)
         except:
             pass
-
-    @rtfm.command(name='py-jp', aliases=['py-ja'])
-    async def rtfm_python_jp(self, ctx, *, obj: str = None):
-        """Gives you a documentation link for a Python entity (Japanese)."""
-        await self.do_rtfm(ctx, 'python-jp', obj)
 
     async def refresh_faq_cache(self):
         self.faq_entries = {}

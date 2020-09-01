@@ -146,37 +146,6 @@ class Buttons(commands.Cog):
         """Displays my intro message."""
         await ctx.send('Hello! I\'m a robot! Danny#0007 made me.')
 
-    @commands.command(pass_context=True)
-    @checks.mod_or_permissions(manage_messages=True)
-    async def nostalgia(self, ctx, date: date, *, channel: discord.TextChannel = None):
-        """Pins an old message from a specific date.
-
-        If a channel is not given, then pins from the channel the
-        command was ran on.
-
-        The format of the date must be either YYYY-MM-DD or YYYY/MM/DD.
-        """
-        channel = channel or ctx.channel
-
-        message = await channel.history(after=date, limit=1).flatten()
-
-        if len(message) == 0:
-            return await ctx.send('Could not find message.')
-
-        message = message[0]
-
-        try:
-            await message.pin()
-        except discord.HTTPException:
-            await ctx.send('Could not pin message.')
-        else:
-            await ctx.send('Pinned message.')
-
-    @nostalgia.error
-    async def nostalgia_error(self, ctx, error):
-        if isinstance(error, commands.BadArgument):
-            await ctx.send(error)
-
     @commands.command()
     async def charinfo(self, ctx, *, characters: str):
         """Shows you information about a number of characters.
