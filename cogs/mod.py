@@ -157,7 +157,7 @@ class CooldownByContent(commands.CooldownMapping):
 class SpamChecker:
     """This spam checker does a few things.
 
-    1) It checks if a user has spammed more than 15 times in 17 seconds
+    1) It checks if a user has spammed more than 10 times in 12 seconds
     2) It checks if the content has been spammed 15 times in 17 seconds.
 
     The second case is meant to catch alternating spam bots while the first one
@@ -169,7 +169,7 @@ class SpamChecker:
     """
     def __init__(self):
         self.by_content = CooldownByContent.from_cooldown(15, 17.0, commands.BucketType.member)
-        self.by_user = commands.CooldownMapping.from_cooldown(15, 17.0, commands.BucketType.user)
+        self.by_user = commands.CooldownMapping.from_cooldown(10, 12.0, commands.BucketType.user)
         self.last_join = None
         self.new_user = commands.CooldownMapping.from_cooldown(30, 35.0, commands.BucketType.channel)
 
@@ -662,7 +662,7 @@ class Mod(commands.Cog):
     @commands.command()
     @commands.guild_only()
     @checks.has_permissions(kick_members=True)
-    async def kick(self, ctx, member: discord.Member, *, reason: ActionReason = None):
+    async def kick(self, ctx, member: MemberID, *, reason: ActionReason = None):
         """Kicks a member from the server.
 
         In order for this to work, the bot must have Kick Member permissions.
@@ -673,7 +673,7 @@ class Mod(commands.Cog):
         if reason is None:
             reason = f'Action done by {ctx.author} (ID: {ctx.author.id})'
 
-        await member.kick(reason=reason)
+        await ctx.guild.kick(member, reason=reason)
         await ctx.send('\N{OK HAND SIGN}')
 
     @commands.command()

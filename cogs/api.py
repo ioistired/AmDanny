@@ -207,7 +207,27 @@ class API(commands.Cog):
     @rtfm.command(name='python', aliases=['py'])
     async def rtfm_python(self, ctx, *, obj: str = None):
         """Gives you a documentation link for a Python entity."""
-        await self.do_rtfm(ctx, 'python', obj)
+        key = self.transform_rtfm_language_key(ctx, 'python')
+        await self.do_rtfm(ctx, key, obj)
+
+    @rtfm.command(name='py-jp', aliases=['py-ja'])
+    async def rtfm_python_jp(self, ctx, *, obj: str = None):
+        """Gives you a documentation link for a Python entity (Japanese)."""
+        await self.do_rtfm(ctx, 'python-jp', obj)
+
+    @commands.command()
+    @can_use_block()
+    async def block(self, ctx, *, member: discord.Member):
+        """Blocks a user from your channel."""
+
+        reason = f'Block by {ctx.author} (ID: {ctx.author.id})'
+
+        try:
+            await ctx.channel.set_permissions(member, send_messages=False, add_reactions=False, reason=reason)
+        except:
+            await ctx.send('\N{THUMBS DOWN SIGN}')
+        else:
+            await ctx.send('\N{THUMBS UP SIGN}')
 
     @commands.command()
     @commands.has_permissions(manage_roles=True)
@@ -233,8 +253,12 @@ class API(commands.Cog):
 
         reason = f'Tempblock by {ctx.author} (ID: {ctx.author.id}) until {duration.dt}'
 
-        await ctx.channel.set_permissions(member, send_messages=False, reason=reason)
-        await ctx.send(f'Blocked {member} for {time.human_timedelta(duration.dt, source=timer.created_at)}.')
+        try:
+            await ctx.channel.set_permissions(member, send_messages=False, reason=reason)
+        except:
+            await ctx.send('\N{THUMBS DOWN SIGN}')
+        else:
+            await ctx.send(f'Blocked {member} for {time.human_timedelta(duration.dt, source=timer.created_at)}.')
 
     @commands.Cog.listener()
     async def on_tempblock_timer_complete(self, timer):
@@ -271,7 +295,7 @@ class API(commands.Cog):
         reason = f'Automatic unblock from timer made on {timer.created_at} by {moderator}.'
 
         try:
-            await ctx.channel.set_permissions(to_unblock, send_messages=None, reason=reason)
+            await channel.set_permissions(to_unblock, send_messages=None, reason=reason)
         except:
             pass
 
