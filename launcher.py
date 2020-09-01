@@ -59,8 +59,7 @@ def run_bot():
         log.exception('Could not set up PostgreSQL. Exiting.')
         return
 
-    bot = RoboDanny()
-    bot.pool = pool
+    bot = RoboDanny(pool=pool)
     bot.run()
 
 @click.group(invoke_without_command=True, options_metavar='[options]')
