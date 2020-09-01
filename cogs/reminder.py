@@ -259,6 +259,11 @@ class Reminder(commands.Cog):
 
         await ctx.send(out.getvalue())
 
+    @commands.command(ignore_extra=False)
+    async def reminders(self, ctx):
+        """An alias for reminder list command."""
+        await ctx.invoke(self.reminder_list)
+
     @reminder.command(name='delete', aliases=['remove', 'cancel'], ignore_extra=False)
     async def reminder_delete(self, ctx, *, id: int):
         """Deletes a reminder by its ID.
