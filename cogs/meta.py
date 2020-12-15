@@ -313,7 +313,7 @@ class Meta(commands.Cog):
         periods, e.g. tag.create for the create subcommand of the tag command
         or by spaces.
         """
-        source_url = 'https://github.com/bmintz/AmDanny'
+        source_url = 'https://github.com/iomintz/AmDanny'
         branch = 'rewrite'
         if command is None:
             return await ctx.send(source_url)
