@@ -1452,9 +1452,9 @@ class Mod(commands.Cog):
         The bot must have Manage Roles permission and be
         above the muted role in the hierarchy.
 
-        To use this command you need to be higher than the
-        mute role in the hierarchy and have Manage Roles
-        permission at the server level.
+        In order to use this command you must:
+        - be above the mute role in the role hierarchy
+        - have either the manage roles or messages permission
         """
 
         if reason is None:
@@ -1485,9 +1485,9 @@ class Mod(commands.Cog):
         The bot must have Manage Roles permission and be
         above the muted role in the hierarchy.
 
-        To use this command you need to be higher than the
-        mute role in the hierarchy and have Manage Roles
-        permission at the server level.
+        In order to use this command you must:
+        - be above the mute role in the role hierarchy
+        - have either the manage roles or messages permission
         """
 
         if reason is None:
