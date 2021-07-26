@@ -235,7 +235,7 @@ def can_mute():
         if ctx.guild is None:
             return False
 
-        if not ctx.author.guild_permissions.manage_roles and not is_owner:
+        if not (ctx.author.guild_permissions.manage_roles or ctx.author.guild_permissions.manage_messages) and not is_owner:
             return False
 
         # This will only be used within this cog.
