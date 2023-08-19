@@ -1,4 +1,5 @@
-git+https://github.com/Rapptz/discord.py@master
+#git+https://github.com/Rapptz/discord.py@master
+discord.py ~= 1.0
 git+https://github.com/ssut/py-googletrans@master
 asyncpg>=0.12.0
 bot_bin[sql]>=1.0.0,<2.0.0
